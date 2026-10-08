@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import logging
+import math
 import time
 from functools import cached_property
 
@@ -60,7 +61,56 @@ class SOFollower(Robot):
             },
             calibration=self.calibration,
         )
+        self._last_stable_present_pos: dict[str, float] | None = None
+        self._feedback_fault: str | None = None
+        self._ramp_target: dict[str, float] | None = None
+        self._ramp_time: float | None = None
+        self._validate_ramp_config()
         self.cameras = make_cameras_from_configs(config.cameras)
+
+    def _validate_ramp_config(self) -> None:
+        """Require explicit, finite speed and tracking bounds for every motor."""
+        speed = self.config.max_target_velocity
+        error = self.config.max_tracking_error
+        if speed is None and error is None:
+            return
+        if speed is None or error is None:
+            raise ValueError("max_target_velocity and max_tracking_error must be set together")
+        if self.config.max_relative_target is not None:
+            raise ValueError("Time-based ramp cannot be combined with max_relative_target")
+        for name, limit in (("max_target_velocity", speed), ("max_tracking_error", error)):
+            if isinstance(limit, dict) and set(limit) != set(self.bus.motors):
+                raise ValueError(f"{name} must specify every motor")
+            values = limit.values() if isinstance(limit, dict) else [limit]
+            if any(not math.isfinite(v) or v <= 0 for v in values):
+                raise ValueError(f"{name} must contain finite positive values")
+        if not math.isfinite(self.config.target_ramp_max_dt) or self.config.target_ramp_max_dt <= 0:
+            raise ValueError("target_ramp_max_dt must be finite and positive")
+
+    def _ramped_goal(self, goal: dict[str, float], present: dict[str, float]) -> dict[str, float]:
+        """Intersect elapsed-time speed bounds with the measured tracking envelope.
+
+        First command holds measured position. State is committed only after a
+        successful bus write; clamped-away motion is never accumulated.
+        """
+        now = time.monotonic()
+        dt = 0.0 if self._ramp_time is None else min(now - self._ramp_time, self.config.target_ramp_max_dt)
+        dt = max(0.0, dt)
+        previous = present if self._ramp_target is None else self._ramp_target
+        result = {}
+        for motor, requested in goal.items():
+            speed = self.config.max_target_velocity
+            error = self.config.max_tracking_error
+            speed = speed[motor] if isinstance(speed, dict) else speed
+            error = error[motor] if isinstance(error, dict) else error
+            step = speed * dt
+            base = previous.get(motor, present[motor])
+            low = max(base - step, present[motor] - error)
+            high = min(base + step, present[motor] + error)
+            if low > high:
+                raise RuntimeError(f"{motor}: feedback moved outside target ramp tracking envelope")
+            result[motor] = min(high, max(low, requested))
+        return result
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -96,6 +146,10 @@ class SOFollower(Robot):
         """
 
         self.bus.connect()
+        self._last_stable_present_pos = None
+        self._feedback_fault = None
+        self._ramp_target = None
+        self._ramp_time = None
         if not self.is_calibrated and calibrate:
             logger.info(
                 "Mismatch between calibration values in the motor and the calibration file or no calibration file found"
@@ -180,7 +234,7 @@ class SOFollower(Robot):
     def get_observation(self) -> RobotObservation:
         # Read arm position
         start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
+        obs_dict = self._read_present_position()
         obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
@@ -201,6 +255,49 @@ class SOFollower(Robot):
 
         return obs_dict
 
+    def _validate_present_position(self, present_pos: dict[str, float]) -> dict[str, float]:
+        """Reject invalid feedback; never substitute a cached pose for a measurement.
+
+        A fault stays latched until reconnect, including when subsequent readings
+        return to the old pose. Recording must not silently save stale states.
+        """
+        self._check_feedback_fault()
+        if set(present_pos) != set(self.bus.motors):
+            self._reject_feedback("Incomplete Present_Position: expected all configured motors")
+        if any(not math.isfinite(value) for value in present_pos.values()):
+            self._reject_feedback("Non-finite Present_Position")
+
+        # Keep the latest actual measurement for rollout diagnostics only.
+        # Motion magnitude is not filtered, clamped, or replaced by an old pose.
+        self._last_stable_present_pos = present_pos.copy()
+        return present_pos
+
+    def _check_feedback_fault(self) -> None:
+        if self._feedback_fault is not None:
+            raise RuntimeError(self._feedback_fault)
+
+    def _reject_feedback(self, reason: str) -> None:
+        self._feedback_fault = (
+            f"{reason}. Feedback invalid; recording and new motion commands are blocked. "
+            "Inspect the arm/calibration, then disconnect and reconnect before retrying."
+        )
+        self._ramp_target = None
+        self._ramp_time = None
+        raise RuntimeError(self._feedback_fault)
+
+    def _read_present_position(self) -> dict[str, float]:
+        self._check_feedback_fault()
+        try:
+            present = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
+        except Exception as exc:
+            self._feedback_fault = (
+                "Present_Position read failed; inspect the bus and reconnect before retrying."
+            )
+            self._ramp_target = None
+            self._ramp_time = None
+            raise RuntimeError(self._feedback_fault) from exc
+        return self._validate_present_position(present)
+
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
         """Command arm to move to a target joint configuration.
@@ -217,20 +314,31 @@ class SOFollower(Robot):
         """
 
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
+        self._check_feedback_fault()
+        if any(not math.isfinite(value) for value in goal_pos.values()):
+            raise ValueError("Action contains non-finite positions")
 
         # Cap goal position when too far away from present position.
         # /!\ Slower fps expected due to reading from the follower.
-        if self.config.max_relative_target is not None:
-            present_pos = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
-            goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
-            goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
+        present_pos = self._read_present_position()
+        if self.config.max_relative_target is not None or self.config.max_target_velocity is not None:
+            if self.config.max_target_velocity is not None:
+                goal_pos = self._ramped_goal(goal_pos, present_pos)
+            else:
+                goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
+                goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
 
         # Send goal position to the arm
         self.bus.sync_write("Goal_Position", goal_pos)
+        if self.config.max_target_velocity is not None:
+            self._ramp_target = goal_pos.copy()
+            self._ramp_time = time.monotonic()
         return {f"{motor}.pos": val for motor, val in goal_pos.items()}
 
     @check_if_not_connected
     def disconnect(self):
+        self._ramp_target = None
+        self._ramp_time = None
         self.bus.disconnect(self.config.disable_torque_on_disconnect)
         for cam in self.cameras.values():
             cam.disconnect()

@@ -163,10 +163,12 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
         return None
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        # Encode against the base class so draccus includes the choice "type" key,
-        # which `from_pretrained` needs to resolve the concrete subclass.
+        # draccus.encode accepts one argument. Preserve the choice discriminator
+        # explicitly so from_pretrained can resolve the concrete subclass.
+        config_dict = draccus.encode(self)
+        config_dict["type"] = self.type
         with open(save_directory / CONFIG_NAME, "w") as f:
-            json.dump(draccus.encode(self, PreTrainedConfig), f, indent=4)
+            json.dump(config_dict, f, indent=4)
 
     @classmethod
     def from_pretrained(

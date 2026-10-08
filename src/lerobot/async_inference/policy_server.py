@@ -50,11 +50,13 @@ from lerobot.transport.utils import receive_bytes_in_chunks
 from .configs import PolicyServerConfig
 from .constants import SUPPORTED_POLICIES
 from .helpers import (
+    CompressedImage,
     FPSTracker,
     Observation,
     RemotePolicyConfig,
     TimedAction,
     TimedObservation,
+    decode_timed_observation,
     get_logger,
     observations_similar,
     raw_observation_to_observation,
@@ -78,13 +80,19 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         self._predicted_timesteps = set()
 
         self.last_processed_obs = None
+        self._received_observation_count = 0
+        self._receive_stats_started_at = time.perf_counter()
+        self._receive_stats_last_report_at = self._receive_stats_started_at
 
-        # Attributes will be set by SendPolicyInstructions
+        # Attributes are cached across client connections; only reload the model
+        # when the pretrained path changes. Per-connection state (features,
+        # actions_per_chunk, queue, predicted_timesteps) is reset on each Ready().
         self.device = None
         self.policy_type = None
         self.lerobot_features = None
         self.actions_per_chunk = None
         self.policy = None
+        self.pretrained_name_or_path = None
         self.preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None
         self.postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None
 
@@ -97,13 +105,23 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         return self.policy.config.image_features
 
     def _reset_server(self) -> None:
-        """Flushes server state when new client connects."""
-        # only running inference on the latest observation received by the server
+        """Flushes per-connection state when a new client connects.
+
+        The loaded model, preprocessor and postprocessor are intentionally
+        NOT reset here — they stay resident in GPU memory across connections.
+        Only observation-stream state is cleared.
+        """
+        # Stop any in-flight observation processing
         self.shutdown_event.set()
         self.observation_queue = Queue(maxsize=1)
 
         with self._predicted_timesteps_lock:
             self._predicted_timesteps = set()
+
+        self.last_processed_obs = None
+        self._received_observation_count = 0
+        self._receive_stats_started_at = time.perf_counter()
+        self._receive_stats_last_report_at = self._receive_stats_started_at
 
     def Ready(self, request, context):  # noqa: N802
         client_id = context.peer()
@@ -146,11 +164,27 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         self.lerobot_features = policy_specs.lerobot_features
         self.actions_per_chunk = policy_specs.actions_per_chunk
 
+        # Only (re)load the model if it isn't already resident with the same path.
+        # This makes the server survive client disconnects without paying the
+        # 15-20s from_pretrained cost on every reconnect.
+        if (
+            self.policy is not None
+            and self.pretrained_name_or_path == policy_specs.pretrained_name_or_path
+        ):
+            self.logger.info(
+                f"Model already resident ({policy_specs.pretrained_name_or_path}), "
+                "skipping reload. Updating per-connection config only."
+            )
+            # Still re-apply device in case it changed
+            self.policy.to(self.device)
+            return services_pb2.Empty()
+
         policy_class = get_policy_class(self.policy_type)
 
         start = time.perf_counter()
         self.policy = policy_class.from_pretrained(policy_specs.pretrained_name_or_path)
         self.policy.to(self.device)
+        self.pretrained_name_or_path = policy_specs.pretrained_name_or_path
 
         # Load preprocessor and postprocessor, overriding device to match requested device
         device_override = {"device": self.device}
@@ -180,8 +214,26 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         received_bytes = receive_bytes_in_chunks(
             request_iterator, None, self.shutdown_event, self.logger
         )  # blocking call while looping over request_iterator
-        timed_observation = pickle.loads(received_bytes)  # nosec
+        wire_observation = pickle.loads(received_bytes)  # nosec
+        compressed_images = sum(
+            isinstance(value, CompressedImage)
+            for value in wire_observation.get_observation().values()
+        )
+        timed_observation = decode_timed_observation(wire_observation)
         deserialize_time = time.perf_counter() - start_deserialize
+
+        self._received_observation_count += 1
+        report_now = time.perf_counter()
+        report_elapsed = report_now - self._receive_stats_last_report_at
+        if report_elapsed >= 1.0:
+            total_elapsed = report_now - self._receive_stats_started_at
+            self.logger.info(
+                f"Observation receive: count={self._received_observation_count} "
+                f"avg_fps={self._received_observation_count / max(total_elapsed, 1e-6):.2f} "
+                f"payload={len(received_bytes) / 1024:.1f}KiB "
+                f"jpeg_images={compressed_images} decode_ms={deserialize_time * 1000:.1f}"
+            )
+            self._receive_stats_last_report_at = report_now
 
         self.logger.debug(f"Received observation #{timed_observation.get_timestep()}")
 

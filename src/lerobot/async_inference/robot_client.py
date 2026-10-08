@@ -40,7 +40,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict
 from pprint import pformat
-from queue import Queue
+from queue import Empty, Full, Queue
 from typing import Any
 
 import draccus
@@ -81,16 +81,19 @@ from lerobot.utils.import_utils import register_third_party_plugins
 from .configs import RobotClientConfig
 from .helpers import (
     Action,
+    CompressedImage,
     FPSTracker,
     Observation,
     RawObservation,
     RemotePolicyConfig,
     TimedAction,
     TimedObservation,
+    encode_timed_observation,
     get_logger,
     map_robot_keys_to_lerobot_features,
     visualize_action_queue_size,
 )
+from .joint_units import SOJointUnitConverter
 
 
 class RobotClient:
@@ -107,6 +110,13 @@ class RobotClient:
         self.config = config
         self.robot = make_robot_from_config(config.robot)
         self.robot.connect()
+        self.joint_unit_converter = None
+        try:
+            if config.policy_joint_units == "range_m100_100":
+                self.joint_unit_converter = SOJointUnitConverter(self.robot.bus)
+        except Exception:
+            self.robot.disconnect()
+            raise
 
         lerobot_features = map_robot_keys_to_lerobot_features(self.robot)
 
@@ -127,6 +137,14 @@ class RobotClient:
         self.logger.info(f"Initializing client to connect to server at {self.server_address}")
 
         self.shutdown_event = threading.Event()
+        self._observation_queue: Queue[TimedObservation] = Queue(maxsize=1)
+        self._observation_sender_thread: threading.Thread | None = None
+        self._observation_stats_lock = threading.Lock()
+        self._observation_sent_count = 0
+        self._observation_dropped_count = 0
+        self._observation_stats_started_at = time.perf_counter()
+        self._observation_stats_last_report_at = self._observation_stats_started_at
+        self._observation_stats_last_report_count = 0
 
         # Initialize client side variables
         self.latest_action_lock = threading.Lock()
@@ -176,6 +194,7 @@ class RobotClient:
             self.stub.SendPolicyInstructions(policy_setup)
 
             self.shutdown_event.clear()
+            self._start_observation_sender()
 
             return True
 
@@ -187,11 +206,72 @@ class RobotClient:
         """Stop the robot client"""
         self.shutdown_event.set()
 
+        if self._observation_sender_thread is not None:
+            self._observation_sender_thread.join(timeout=2.0)
+            self._observation_sender_thread = None
+
         self.robot.disconnect()
         self.logger.debug("Robot disconnected")
 
         self.channel.close()
         self.logger.debug("Client stopped, channel closed")
+
+    def _start_observation_sender(self) -> None:
+        """Start the latest-only asynchronous observation transport worker."""
+        self._observation_queue = Queue(maxsize=1)
+        with self._observation_stats_lock:
+            self._observation_sent_count = 0
+            self._observation_dropped_count = 0
+            self._observation_stats_started_at = time.perf_counter()
+            self._observation_stats_last_report_at = self._observation_stats_started_at
+            self._observation_stats_last_report_count = 0
+        self._observation_sender_thread = threading.Thread(
+            target=self._observation_sender_loop,
+            name="observation-sender",
+            daemon=True,
+        )
+        self._observation_sender_thread.start()
+
+    def _observation_sender_loop(self) -> None:
+        """Send the newest queued observation without blocking the control loop."""
+        while self.running:
+            try:
+                observation = self._observation_queue.get(timeout=0.1)
+            except Empty:
+                continue
+            try:
+                if self.running and not self.send_observation(observation):
+                    self.shutdown_event.set()
+            except Exception:
+                self.logger.exception("Observation sender failed; stopping control")
+                self.shutdown_event.set()
+            finally:
+                self._observation_queue.task_done()
+
+    def enqueue_observation(self, obs: TimedObservation) -> bool:
+        """Queue an observation, replacing a stale pending frame if necessary."""
+        if not self.running:
+            return False
+        if not isinstance(obs, TimedObservation):
+            raise ValueError("Input observation needs to be a TimedObservation!")
+
+        try:
+            self._observation_queue.put_nowait(obs)
+        except Full:
+            # Keep the newest frame. Preserve must_go if the frame being replaced
+            # was the first frame after the action queue became empty.
+            try:
+                stale = self._observation_queue.get_nowait()
+            except Empty:
+                # The sender may have consumed the pending frame since put_nowait.
+                stale = None
+            if stale is not None:
+                obs.must_go = obs.must_go or stale.must_go
+                self._observation_queue.task_done()
+            self._observation_queue.put_nowait(obs)
+            with self._observation_stats_lock:
+                self._observation_dropped_count += int(stale is not None)
+        return True
 
     def send_observation(
         self,
@@ -205,21 +285,46 @@ class RobotClient:
         if not isinstance(obs, TimedObservation):
             raise ValueError("Input observation needs to be a TimedObservation!")
 
+        wire_observation = encode_timed_observation(obs, self.config.observation_jpeg_quality)
         start_time = time.perf_counter()
-        observation_bytes = pickle.dumps(obs)
+        observation_bytes = pickle.dumps(wire_observation)
         serialize_time = time.perf_counter() - start_time
-        self.logger.debug(f"Observation serialization time: {serialize_time:.6f}s")
+        compressed_images = sum(
+            isinstance(value, CompressedImage) for value in wire_observation.get_observation().values()
+        )
 
         try:
+            send_start = time.perf_counter()
             observation_iterator = send_bytes_in_chunks(
                 observation_bytes,
                 services_pb2.Observation,
                 log_prefix="[CLIENT] Observation",
                 silent=True,
             )
-            _ = self.stub.SendObservations(observation_iterator)
+            _ = self.stub.SendObservations(observation_iterator, timeout=2.0)
+            send_time = time.perf_counter() - send_start
             obs_timestep = obs.get_timestep()
-            self.logger.debug(f"Sent observation #{obs_timestep} | ")
+            with self._observation_stats_lock:
+                self._observation_sent_count += 1
+                sent_count = self._observation_sent_count
+                dropped_count = self._observation_dropped_count
+                now = time.perf_counter()
+                report_elapsed = now - self._observation_stats_last_report_at
+                total_elapsed = now - self._observation_stats_started_at
+                if report_elapsed >= 1.0:
+                    interval_fps = (
+                        sent_count - self._observation_stats_last_report_count
+                    ) / report_elapsed
+                    self.logger.info(
+                        f"Observation transport: sent={sent_count} "
+                        f"interval_fps={interval_fps:.2f} "
+                        f"avg_fps={sent_count / max(total_elapsed, 1e-6):.2f} "
+                        f"last_seq={obs_timestep} payload={len(observation_bytes) / 1024:.1f}KiB "
+                        f"jpeg_images={compressed_images} send_ms={send_time * 1000:.1f} "
+                        f"serialize_ms={serialize_time * 1000:.1f} dropped_pending={dropped_count}"
+                    )
+                    self._observation_stats_last_report_at = now
+                    self._observation_stats_last_report_count = sent_count
 
             return True
 
@@ -377,7 +482,12 @@ class RobotClient:
             return not self.action_queue.empty()
 
     def _action_tensor_to_action_dict(self, action_tensor: torch.Tensor) -> dict[str, float]:
+        if action_tensor.ndim != 1 or action_tensor.numel() != len(self.robot.action_features):
+            raise ValueError("Policy action shape does not match robot joints")
         action = {key: action_tensor[i].item() for i, key in enumerate(self.robot.action_features)}
+        converter = getattr(self, "joint_unit_converter", None)
+        if converter is not None:
+            action = converter.action_to_robot(action)
         return action
 
     def control_loop_action(self, verbose: bool = False) -> dict[str, Any]:
@@ -425,13 +535,17 @@ class RobotClient:
 
             raw_observation: RawObservation = self.robot.get_observation()
             raw_observation["task"] = task
+            converter = getattr(self, "joint_unit_converter", None)
+            policy_observation = (
+                converter.observation_to_policy(raw_observation) if converter is not None else raw_observation
+            )
 
             with self.latest_action_lock:
                 latest_action = self.latest_action
 
             observation = TimedObservation(
                 timestamp=time.time(),  # need time.time() to compare timestamps across client and server
-                observation=raw_observation,
+                observation=policy_observation,
                 timestep=max(latest_action, 0),
             )
 
@@ -442,9 +556,12 @@ class RobotClient:
                 observation.must_go = self.must_go.is_set() and self.action_queue.empty()
                 current_queue_size = self.action_queue.qsize()
 
-            _ = self.send_observation(observation)
+            queued = self.enqueue_observation(observation)
 
-            self.logger.debug(f"QUEUE SIZE: {current_queue_size} (Must go: {observation.must_go})")
+            self.logger.debug(
+                f"QUEUE SIZE: {current_queue_size} (Must go: {observation.must_go}) "
+                f"Observation queued: {queued}"
+            )
             if observation.must_go:
                 # must-go event will be set again after receiving actions
                 self.must_go.clear()
@@ -467,6 +584,8 @@ class RobotClient:
 
         except Exception as e:
             self.logger.error(f"Error in observation sender: {e}")
+            self.shutdown_event.set()
+            raise
 
     def control_loop(self, task: str, verbose: bool = False) -> tuple[Observation, Action]:
         """Combined function for executing actions and streaming observations"""

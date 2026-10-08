@@ -553,6 +553,14 @@ def record(
                 timer.log_episode_summary(f"episode {episode_index}")
                 timer.restart()
     finally:
+        # Disconnect hardware before speech, encoding or upload can delay cleanup.
+        # A failed disconnect must not prevent attempts to clean up other devices.
+        for device in (robot, teleop):
+            if device is not None and device.is_connected:
+                try:
+                    device.disconnect()
+                except Exception:
+                    logging.exception("Failed to disconnect recording device")
         # First, and in `finally`: ^C is how most recording sessions end, and the summary
         # is most useful before the video encoding and the hub upload scroll it away.
         timer.log_run_summary()
@@ -561,11 +569,6 @@ def record(
 
         if dataset:
             dataset.finalize()
-
-        if robot.is_connected:
-            robot.disconnect()
-        if teleop and teleop.is_connected:
-            teleop.disconnect()
 
         if listener is not None:
             listener.stop()

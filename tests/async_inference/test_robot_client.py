@@ -72,6 +72,18 @@ def robot_client():
 # -----------------------------------------------------------------------------
 
 
+def test_observation_failure_stops_client_without_unit_converter(robot_client, monkeypatch):
+    def invalid_feedback():
+        raise RuntimeError("Feedback invalid")
+
+    monkeypatch.setattr(robot_client.robot, "get_observation", invalid_feedback)
+    assert robot_client.joint_unit_converter is None
+    with pytest.raises(RuntimeError, match="Feedback invalid"):
+        robot_client.control_loop_observation("test")
+    assert robot_client.shutdown_event.is_set()
+    assert robot_client._observation_queue.empty()
+
+
 def _make_actions(start_ts: float, start_t: int, count: int):
     """Generate `count` consecutive TimedAction objects starting at timestep `start_t`."""
     from lerobot.async_inference.helpers import TimedAction

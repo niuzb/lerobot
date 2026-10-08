@@ -35,6 +35,21 @@ class SOFollowerConfig:
     # names to the max_relative_target value for that motor.
     max_relative_target: float | dict[str, float] | None = None
 
+    # Optional time-based target ramp. Units follow motor normalization: degrees/s
+    # for body joints with use_degrees=True, percentage points/s for the gripper.
+    # Requires max_tracking_error; cannot be combined with max_relative_target.
+    max_target_velocity: float | dict[str, float] | None = None
+    max_tracking_error: float | dict[str, float] | None = None
+    # Do not accumulate a large movement allowance during communication pauses.
+    target_ramp_max_dt: float = 0.1
+
+    # Deprecated, ignored: accepted for compatibility with saved configs/commands.
+    # Feedback no longer applies position-jump thresholds or time compensation.
+    max_position_jump: float = 5.0
+    max_gripper_position_jump: float = 10.0
+    feedback_reference_dt: float = 1 / 30
+    feedback_max_dt: float = 0.1
+
     # cameras
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 

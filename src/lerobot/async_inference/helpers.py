@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import logging
 import logging.handlers
 import os
@@ -20,7 +21,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
+from PIL import Image
 
 from lerobot.configs import PolicyFeature
 
@@ -42,6 +45,37 @@ Action = torch.Tensor
 
 # observation as received from the robot (can be numpy arrays, floats, etc.)
 RawObservation = dict[str, Any]
+
+
+@dataclass
+class CompressedImage:
+    """JPEG image stored in an observation sent over the inference transport."""
+
+    data: bytes
+    shape: tuple[int, ...]
+    dtype: str
+
+
+def _encode_observation_image(value: Any, jpeg_quality: int) -> CompressedImage | None:
+    """Encode an RGB uint8 camera frame, returning ``None`` for non-image values."""
+    if not isinstance(value, np.ndarray) or value.ndim != 3 or value.shape[-1] != 3:
+        return None
+    if value.dtype != np.uint8:
+        return None
+
+    image = Image.fromarray(np.ascontiguousarray(value), mode="RGB")
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=jpeg_quality, optimize=False)
+    return CompressedImage(data=buffer.getvalue(), shape=tuple(value.shape), dtype=str(value.dtype))
+
+
+def _decode_observation_image(value: CompressedImage) -> np.ndarray:
+    """Decode a transport JPEG back to the RGB uint8 array expected by policies."""
+    with Image.open(io.BytesIO(value.data)) as image:
+        decoded = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    if tuple(decoded.shape) != tuple(value.shape):
+        raise ValueError(f"Decoded JPEG shape {decoded.shape} does not match metadata {value.shape}")
+    return decoded
 
 # observation as those recorded in LeRobot dataset (keys are different)
 LeRobotObservation = dict[str, torch.Tensor]
@@ -233,6 +267,47 @@ class TimedObservation(TimedData):
 
     def get_observation(self):
         return self.observation
+
+
+def encode_timed_observation(obs: TimedObservation, jpeg_quality: int = 80) -> TimedObservation:
+    """Create a wire copy of an observation with camera frames JPEG-compressed.
+
+    The robot-side observation remains untouched. The server calls
+    :func:`decode_timed_observation` before converting the observation for the policy.
+    """
+    if not 1 <= jpeg_quality <= 100:
+        raise ValueError(f"jpeg_quality must be between 1 and 100, got {jpeg_quality}")
+
+    encoded_observation = dict(obs.get_observation())
+    for key, value in encoded_observation.items():
+        encoded = _encode_observation_image(value, jpeg_quality)
+        if encoded is not None:
+            encoded_observation[key] = encoded
+
+    return TimedObservation(
+        timestamp=obs.get_timestamp(),
+        observation=encoded_observation,
+        timestep=obs.get_timestep(),
+        must_go=obs.must_go,
+    )
+
+
+def decode_timed_observation(obs: TimedObservation) -> TimedObservation:
+    """Decode any JPEG camera frames in a wire observation.
+
+    Raw observations are accepted unchanged for backward compatibility with older clients.
+    """
+    decoded_observation = dict(obs.get_observation())
+    for key, value in decoded_observation.items():
+        if isinstance(value, CompressedImage):
+            decoded_observation[key] = _decode_observation_image(value)
+
+    return TimedObservation(
+        timestamp=obs.get_timestamp(),
+        observation=decoded_observation,
+        timestep=obs.get_timestep(),
+        must_go=obs.must_go,
+    )
 
 
 @dataclass

@@ -27,6 +27,8 @@ from lerobot.async_inference.helpers import (  # noqa: E402
     FPSTracker,
     TimedAction,
     TimedObservation,
+    decode_timed_observation,
+    encode_timed_observation,
     observations_similar,
     prepare_image,
     prepare_raw_observation,
@@ -167,6 +169,31 @@ def test_timed_data_deserialization_data_getters():
     assert to_out.must_go is True
     assert to_out.get_observation().keys() == obs_dict.keys()
     torch.testing.assert_close(to_out.get_observation()[OBS_STATE], obs_dict[OBS_STATE])
+
+
+def test_timed_observation_jpeg_transport_roundtrip():
+    """JPEG transport keeps metadata and restores an RGB image for the policy."""
+    image = np.zeros((24, 32, 3), dtype=np.uint8)
+    image[4:20, 8:24] = [255, 32, 16]
+    original = TimedObservation(
+        timestamp=123.5,
+        timestep=7,
+        must_go=True,
+        observation={"camera": image, "joint.pos": 1.25, "task": "pick"},
+    )
+
+    encoded = encode_timed_observation(original, jpeg_quality=80)
+    assert encoded.must_go is True
+    assert encoded.get_timestep() == 7
+    assert encoded.get_observation()["camera"].data
+    assert len(encoded.get_observation()["camera"].data) < image.nbytes
+
+    decoded = decode_timed_observation(encoded)
+    decoded_image = decoded.get_observation()["camera"]
+    assert decoded_image.shape == image.shape
+    assert decoded_image.dtype == image.dtype
+    assert decoded.get_observation()["joint.pos"] == 1.25
+    assert decoded.get_observation()["task"] == "pick"
 
 
 # ---------------------------------------------------------------------

@@ -147,6 +147,13 @@ class RobotClientConfig:
     debug_visualize_queue_size: bool = field(
         default=False, metadata={"help": "Visualize the action queue size"}
     )
+    # Opt-in: keep driver in degrees while a SO policy uses range-normalized joints.
+    policy_joint_units: str = "robot"
+
+    observation_jpeg_quality: int = field(
+        default=80,
+        metadata={"help": "JPEG quality for camera observations sent to the policy server"},
+    )
 
     @property
     def environment_dt(self) -> float:
@@ -179,6 +186,14 @@ class RobotClientConfig:
         if self.actions_per_chunk <= 0:
             raise ValueError(f"actions_per_chunk must be positive, got {self.actions_per_chunk}")
 
+        if self.policy_joint_units not in ("robot", "range_m100_100"):
+            raise ValueError("policy_joint_units must be robot or range_m100_100")
+        if self.observation_jpeg_quality < 1 or self.observation_jpeg_quality > 100:
+            raise ValueError(
+                "observation_jpeg_quality must be between 1 and 100, "
+                f"got {self.observation_jpeg_quality}"
+            )
+
         self.aggregate_fn = get_aggregate_function(self.aggregate_fn_name)
 
     @classmethod
@@ -199,5 +214,7 @@ class RobotClientConfig:
             "actions_per_chunk": self.actions_per_chunk,
             "task": self.task,
             "debug_visualize_queue_size": self.debug_visualize_queue_size,
+            "observation_jpeg_quality": self.observation_jpeg_quality,
+            "policy_joint_units": self.policy_joint_units,
             "aggregate_fn_name": self.aggregate_fn_name,
         }
