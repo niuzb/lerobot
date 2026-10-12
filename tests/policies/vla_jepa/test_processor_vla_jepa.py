@@ -114,6 +114,17 @@ def test_image_prep_leaves_non_image_keys_untouched() -> None:
     assert torch.equal(out[OBS_STATE], state)
 
 
+@pytest.mark.parametrize("mask_shape", [(8,), (2, 8)])
+def test_image_prep_preserves_temporal_padding_masks(mask_shape: tuple[int, ...]) -> None:
+    step = ImagePrepProcessorStep(resize_to=RESIZE)
+    mask = torch.zeros(mask_shape, dtype=torch.bool)
+    mask[..., -1] = True
+    images = torch.rand(*mask_shape, 3, IMAGE_SIZE, IMAGE_SIZE)
+    out = step.observation({IMG_KEY: images, f"{IMG_KEY}_is_pad": mask})
+    assert out[f"{IMG_KEY}_is_pad"] is mask
+    assert out[IMG_KEY].shape == (*mask_shape, 3, *RESIZE)
+
+
 def test_image_prep_config_roundtrip_via_registry() -> None:
     step = ImagePrepProcessorStep(resize_to=RESIZE, expand_channels=True)
     cfg = step.get_config()

@@ -60,7 +60,7 @@ class ImagePrepProcessorStep(ObservationProcessorStep):
     def observation(self, observation: dict) -> dict:
         new_observation = dict(observation)
         for key in observation:
-            if "image" not in key:
+            if "image" not in key or key.endswith("_is_pad"):
                 continue
             image = observation[key].float()
             if self.expand_channels and image.shape[-3] == 1:
