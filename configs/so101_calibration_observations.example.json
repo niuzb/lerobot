@@ -1,0 +1,25 @@
+{
+  "instructions": "Replace every placeholder with measured values. Duplicate views with new unique IDs. At least 3 fit and 3 check views per camera, >=3 independent check joint poses. Do not use validation episodes as generation templates.",
+  "joint_reference_poses": [
+    {"split": "fit", "robot_state": null, "sim_q_rad": null},
+    {"split": "check", "robot_state": null, "sim_q_rad": null, "gripper_gap_m": null}
+  ],
+  "cameras": {
+    "front": {
+      "board": {"inner_corners": [9,6], "square_m": 0.018},
+      "intrinsic_images": [],
+      "views": [
+        {"view_id": "front_fit_001", "split": "fit", "robot_state": null, "world_points_m": null, "image_points_px": null},
+        {"view_id": "front_check_001", "split": "check", "robot_state": null, "world_points_m": null, "image_points_px": null}
+      ]
+    },
+    "side": {
+      "board": {"inner_corners": [9,6], "square_m": 0.018},
+      "intrinsic_images": [],
+      "views": [
+        {"view_id": "side_fit_001", "split": "fit", "robot_state": null, "world_points_m": null, "image_points_px": null},
+        {"view_id": "side_check_001", "split": "check", "robot_state": null, "world_points_m": null, "image_points_px": null}
+      ]
+    }
+  }
+}

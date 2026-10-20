@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "fps": 30,
+  "physics_hz": 300,
+  "joint_names": [
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+    "gripper"
+  ],
+  "asset": "../outputs/so101_sim_vendor/lerobot_robot_so101_mujoco/robotstudio_so101/so101.xml",
+  "dataset_repo_id": "zhniu/smolvla_tape_clean_20261002_142151_curated_v1",
+  "dataset_root": "/root/code/lerobot/datasets/smolvla_tape_clean_20261002_142151_curated_v1",
+  "train_episodes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78
+  ],
+  "validation_episodes": [
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87
+  ],
+  "measurements": {
+    "source": "User measurements supplied 2026-10-16; missing items remain null",
+    "holder_mass_is_estimated": true,
+    "table_extent_is_computational": true,
+    "notes": "World z=0 is the supporting tabletop. Positions and joint/camera calibration must be measured. No inferred scene is accepted as calibrated."
+  },
+  "tape": {
+    "outer_radius_m": 0.023,
+    "inner_radius_m": 0.018,
+    "height_m": 0.019,
+    "mass_kg": 0.003,
+    "position_m": null
+  },
+  "holder": {
+    "inner_radius_m": 0.0385,
+    "wall_m": null,
+    "height_m": 0.095,
+    "bottom_m": 0.004,
+    "mass_kg": 0.005,
+    "position_m": null
+  },
+  "table": {
+    "half_x_m": 0.5,
+    "half_y_m": 0.5,
+    "thickness_m": 0.02
+  },
+  "joint_map": {
+    "sign": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "offset_rad": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "gripper_knots": []
+  },
+  "cameras": {
+    "front": {
+      "parent": "camera_mount",
+      "K": [
+        [
+          463.2625576494261,
+          0.0,
+          309.6429916009968
+        ],
+        [
+          0.0,
+          461.64447968949753,
+          264.54621163293746
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "distortion": [
+        -0.04020470595568638,
+        0.020383766708402813,
+        0.0010665529554457845,
+        -0.00203159218078347,
+        0.11779640087215433
+      ],
+      "T_parent_cv": null
+    },
+    "side": {
+      "parent": "world",
+      "K": [
+        [
+          575.9568090731641,
+          0.0,
+          299.7365835565412
+        ],
+        [
+          0.0,
+          576.3180741926816,
+          223.8883764205199
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "distortion": [
+        -0.36328717848668124,
+        0.10097196887819007,
+        0.0006501011618909375,
+        0.0009674518428971065,
+        0.000853647632286089
+      ],
+      "T_parent_cv": null
+    }
+  },
+  "episode_setups": {},
+  "generation": {
+    "template_episode": 1,
+    "grasp_frame": null,
+    "xy_range_m": [
+      0.02,
+      0.02
+    ],
+    "yaw_range_rad": 0.17,
+    "open_percent": 80,
+    "closed_percent": 0
+  },
+  "intrinsic_calibration": {
+    "date": "2026-10-17",
+    "status": "passed_first_pass_intrinsics_checks",
+    "image_size": [
+      640,
+      480
+    ],
+    "camera_roles": {
+      "front": "wrist",
+      "side": "external"
+    },
+    "board_reference_measured_mm": 90.0,
+    "square_size_m": 0.018,
+    "report": "outputs/calibration/20261017/intrinsics_review_003/intrinsics_report.json",
+    "report_sha256": "4728981578af9bdb31eb048d5990a019c82d793dfc84f276ddb2c967aa9b361b",
+    "captures_unchanged": true,
+    "full_scene_calibration_passed": false,
+    "scope": "Current cameras and optical settings only. Camera mounts, robot mapping and historical recording extrinsics require separate measurement.",
+    "metrics": {
+      "front": {
+        "count": 14,
+        "fit_count": 10,
+        "check_count": 4,
+        "excluded_count": 0,
+        "fit_rms_px": 0.22642859486444739,
+        "check_median_px": 0.17367016524076462,
+        "check_p95_px": 0.38046350330114365,
+        "focal_jackknife_relative_span": [
+          0.061786276187113645,
+          0.05906766280942106
+        ]
+      },
+      "side": {
+        "count": 24,
+        "fit_count": 17,
+        "check_count": 6,
+        "excluded_count": 1,
+        "fit_rms_px": 0.1932134622502338,
+        "check_median_px": 0.16818676888942719,
+        "check_p95_px": 0.40761836767196646,
+        "focal_jackknife_relative_span": [
+          0.006765879565977647,
+          0.004473656668701902
+        ]
+      }
+    }
+  }
+}

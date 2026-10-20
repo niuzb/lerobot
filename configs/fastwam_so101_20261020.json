@@ -1,0 +1,57 @@
+{
+  "run_id": "fastwam_so101_mixed_20261020",
+  "job_root": "/root/code/lerobot/outputs/fastwam_20261020",
+  "scene_config": "/root/code/lerobot/outputs/r2s2r_generation_20261018/scene_generation_merlin.json",
+  "generated": "/root/code/lerobot/outputs/r2s2r_generation_20261018/workflow/production_dataset",
+  "smolvla_status": "/root/code/lerobot/outputs/r2s2r_generation_20261018/workflow/status.json",
+  "smolvla_exitcodes": [
+    "/root/code/lerobot/r2s2r_baseline_20261018_t4.exitcode",
+    "/root/code/lerobot/r2s2r_pipeline_20261018.exitcode"
+  ],
+  "output": "/root/code/lerobot/outputs/train/fastwam_so101_mixed_20261020",
+  "steps": 20000,
+  "effective_batch": 8,
+  "microbatch": 1,
+  "real_samples_per_update": 4,
+  "sim_samples_per_update": 4,
+  "seed": 1000,
+  "learning_rate": 0.0001,
+  "save_every": 5000,
+  "minimum_gpu_gib": 75,
+  "policy": {
+    "action_dim": 6,
+    "proprio_dim": 6,
+    "action_horizon": 32,
+    "n_action_steps": 10,
+    "num_video_frames": 33,
+    "action_video_freq_ratio": 4,
+    "image_size": [224, 448],
+    "use_gradient_checkpointing": true,
+    "mot_checkpoint_mixed_attn": true,
+    "freeze_video_expert": false,
+    "torch_dtype": "bfloat16",
+    "toggle_action_dimensions": [],
+    "loss": {"lambda_video": 1.0, "lambda_action": 1.0}
+  },
+  "models": [
+    {
+      "role": "base",
+      "repo": "lerobot/fastwam_base",
+      "revision": "385a4bd1df7a7895b24c6e530482092b7b08a783",
+      "patterns": ["config.json", "model.safetensors", "policy_*.json", "policy_*.safetensors"]
+    },
+    {
+      "role": "wan",
+      "repo": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+      "revision": "b8fff7315c768468a5333511427288870b2e9635",
+      "patterns": ["vae/*", "text_encoder/*"]
+    },
+    {
+      "role": "tokenizer",
+      "repo": "google/umt5-xxl",
+      "revision": "66cb9e7e85526fe440a945569e42c72fb6cbc0ad",
+      "patterns": ["config.json", "tokenizer.json", "tokenizer_config.json", "special_tokens_map.json", "spiece.model"]
+    }
+  ],
+  "notes": "SO-101 absolute joint targets: first five channels in degrees, gripper 0-100. Real episodes 0-78 train, 79-87 validation. Approximate simulation, calibration_passed=false. Full video and action training; no automatic Hub upload or hardware rollout. GPU smoke test must pass before fresh production training."
+}

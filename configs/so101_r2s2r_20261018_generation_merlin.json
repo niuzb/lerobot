@@ -1,0 +1,449 @@
+{
+  "schema_version": 1,
+  "fps": 30,
+  "physics_hz": 300,
+  "joint_names": [
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+    "gripper"
+  ],
+  "asset": "/root/code/lerobot/outputs/so101_sim_vendor/lerobot_robot_so101_mujoco/robotstudio_so101/so101.sim_experiment_20261018_002_mesh.experimental.xml",
+  "dataset_repo_id": "zhniu/smolvla_tape_clean_20261002_142151_curated_v1",
+  "dataset_root": "/root/code/lerobot/datasets/smolvla_tape_clean_20261002_142151_curated_v1",
+  "train_episodes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78
+  ],
+  "validation_episodes": [
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87
+  ],
+  "measurements": {
+    "source": "User physical measurements through 2026-10-18; holder wall measured 1 mm, mesh construction confirmed",
+    "holder_mass_is_estimated": true,
+    "table_extent_is_computational": true,
+    "notes": "User waived further calibration on 2026-10-18; exploratory simulation only."
+  },
+  "tape": {
+    "outer_radius_m": 0.023,
+    "inner_radius_m": 0.018,
+    "height_m": 0.019,
+    "mass_kg": 0.003,
+    "position_m": [
+      0.2316565614038756,
+      -0.11769022859955858,
+      0.0095
+    ]
+  },
+  "holder": {
+    "inner_radius_m": 0.0385,
+    "wall_m": 0.001,
+    "height_m": 0.095,
+    "bottom_m": 0.004,
+    "mass_kg": 0.005,
+    "position_m": [
+      0.29165656140387564,
+      0.0023097714004414183,
+      0
+    ],
+    "wall_style": "diamond_mesh",
+    "mesh": {
+      "strands_per_direction": 48,
+      "segments_per_strand": 28,
+      "strand_width_m": 0.00045,
+      "circumferential_slope": 1.0,
+      "rim_height_m": 0.002,
+      "parameter_source": "Approximation from the prior black diamond-mesh holder photo; not newly measured",
+      "wall_source": "User supplied wall thickness 1 mm and mesh construction on 2026-10-18",
+      "model": "Rigid intersecting helical ribbons; not deformable metal mesh"
+    }
+  },
+  "table": {
+    "half_x_m": 0.5,
+    "half_y_m": 0.5,
+    "thickness_m": 0.02
+  },
+  "joint_map": {
+    "sign": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "offset_rad": [
+      0,
+      -0.21711452490100727,
+      -0.04800049665617324,
+      0.06980260859103557,
+      0
+    ],
+    "gripper_knots": [
+      [
+        0,
+        -0.2363616507914793
+      ],
+      [
+        100,
+        0.7914054770919002
+      ]
+    ]
+  },
+  "cameras": {
+    "front": {
+      "parent": "camera_mount",
+      "K": [
+        [
+          463.2625576494261,
+          0.0,
+          309.6429916009968
+        ],
+        [
+          0.0,
+          461.64447968949753,
+          264.54621163293746
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "distortion": [
+        -0.04020470595568638,
+        0.020383766708402813,
+        0.0010665529554457845,
+        -0.00203159218078347,
+        0.11779640087215433
+      ],
+      "T_parent_cv": [
+        [
+          -0.04319302155562424,
+          -0.8672402196527782,
+          -0.4960128670765472,
+          0.06834312646187349
+        ],
+        [
+          -0.9989533340052952,
+          0.030008914711789094,
+          0.03452103007625704,
+          -0.007483011918303546
+        ],
+        [
+          -0.015053217881923209,
+          0.4969847748718482,
+          -0.8676286845056346,
+          -0.0031138829290368888
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "side": {
+      "parent": "world",
+      "K": [
+        [
+          575.9568090731641,
+          0.0,
+          299.7365835565412
+        ],
+        [
+          0.0,
+          576.3180741926816,
+          223.8883764205199
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "distortion": [
+        -0.36328717848668124,
+        0.10097196887819007,
+        0.0006501011618909375,
+        0.0009674518428971065,
+        0.000853647632286089
+      ],
+      "T_parent_cv": [
+        [
+          0.09169126044679163,
+          0.7040656430595978,
+          -0.7041905161394563,
+          0.4181613920056889
+        ],
+        [
+          0.9957682079773721,
+          -0.06922856948464792,
+          0.060440724256437824,
+          -0.023948579250593433
+        ],
+        [
+          -0.006195864686393697,
+          -0.7067524145202366,
+          -0.7074338384828674,
+          0.32744183866539617
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    }
+  },
+  "episode_setups": {},
+  "generation": {
+    "template_episode": 1,
+    "grasp_frame": null,
+    "xy_range_m": [
+      0.005,
+      0.005
+    ],
+    "yaw_range_rad": 0.17,
+    "open_percent": 25,
+    "closed_percent": 0,
+    "start_frame": 180,
+    "tip_height_m": 0.006,
+    "inner_tip_radius_m": 0.016
+  },
+  "intrinsic_calibration": {
+    "date": "2026-10-17",
+    "status": "passed_first_pass_intrinsics_checks",
+    "image_size": [
+      640,
+      480
+    ],
+    "camera_roles": {
+      "front": "wrist",
+      "side": "external"
+    },
+    "board_reference_measured_mm": 86.0,
+    "square_size_m": 0.017,
+    "report": "outputs/calibration/20261017/intrinsics_review_003/intrinsics_report.json",
+    "report_sha256": "4728981578af9bdb31eb048d5990a019c82d793dfc84f276ddb2c967aa9b361b",
+    "captures_unchanged": true,
+    "full_scene_calibration_passed": false,
+    "scope": "Pixel intrinsics retained under uniform board scaling. Actual current grid measured 17mm in both axes. Robot-base and wrist-parent extrinsics remain unvalidated.",
+    "metrics": {
+      "front": {
+        "count": 14,
+        "fit_count": 10,
+        "check_count": 4,
+        "excluded_count": 0,
+        "fit_rms_px": 0.22642859486444739,
+        "check_median_px": 0.17367016524076462,
+        "check_p95_px": 0.38046350330114365,
+        "focal_jackknife_relative_span": [
+          0.061786276187113645,
+          0.05906766280942106
+        ]
+      },
+      "side": {
+        "count": 24,
+        "fit_count": 17,
+        "check_count": 6,
+        "excluded_count": 1,
+        "fit_rms_px": 0.1932134622502338,
+        "check_median_px": 0.16818676888942719,
+        "check_p95_px": 0.40761836767196646,
+        "focal_jackknife_relative_span": [
+          0.006765879565977647,
+          0.004473656668701902
+        ]
+      }
+    },
+    "metric_scale_correction_report": "outputs\\calibration\\20261017\\metric_review_001\\metric_report.json",
+    "metric_scale_correction_report_sha256": "11271322da8bd2b7475d1fae2569851af6797f3aeff77ebfdbbfce461d957e3f",
+    "original_intrinsic_report_nominal_square_m": 0.018
+  },
+  "calibration_board": {
+    "inner_corners": [
+      9,
+      6
+    ],
+    "square_m": 0.017,
+    "measured_AB_mm": 136.0,
+    "measured_AC_mm": 85.0,
+    "reference_line_nominal_mm": 90.0,
+    "reference_line_measured_mm": 86.0,
+    "source": "User ruler measurements, 2026-10-17",
+    "reference_line_consistency_residual_mm": 1.0,
+    "measurement_uncertainty_mm": null
+  },
+  "experiment": {
+    "status": "unvalidated_experiment",
+    "user_instruction": "\u5c31\u6309\u73b0\u5728\u7ed9\u7684\u6570\u636e\u6765\u505a\u6a21\u62df\uff0c\u8df3\u8fc7\u6d4b\u8bd5\u6821\u51c6",
+    "calibration_checks_skipped": true,
+    "calibration_passed": false,
+    "assumptions": {
+      "holder_mesh_pattern": "Approximate diamond pitch/strand width and rigid structure; wall 1 mm is user measured",
+      "holder_mass_distribution": "60% lattice, 20% rims, 20% bottom; total remains the user's estimated 5 g",
+      "tape_position": "Assumed at saved board centre; not measured object placement",
+      "holder_position": "Assumed offset (+60,+120) mm from tape in base XY",
+      "base_and_wrist_zero": "Gauge-fixed saved estimates, not absolute registration",
+      "contact_and_actuation": "Existing model friction/servo parameters; no real dynamics fit",
+      "joint_limits": "Simulation copy extended only as needed for saved fit poses",
+      "background": "Plain tabletop, no photoreal reconstruction",
+      "generation": "Ring-wall pinch; starting pose from real training episode 1 frame 180; +/-5mm initial tape XY, seeded light/friction/yaw; white robot material approximates existing real footage"
+    },
+    "input_sha256": {
+      "C:\\Users\\Admin\\code\\lerobot\\configs\\so101_r2s2r_20261018_mesh_holder.json": "2edefea2648ba8a3e11c62c87efe5a7fdf439c1e12c7ce07d9f838a7164e7e7c",
+      "C:\\Users\\Admin\\code\\lerobot\\outputs\\calibration\\20261018\\pose_mapping_diagnostic_002\\report.json": "0a409e86ac173666517bfcf2df3d55432935cde0a84ea8dfa3788168901cc24a",
+      "C:\\Users\\Admin\\code\\lerobot\\outputs\\calibration\\20261018\\gripper_contact_alignment_002\\contact_alignment.json": "ea7caa6134514817cc774948ded23eab1d1f689cd443b334c2b817517f103a6f",
+      "C:\\Users\\Admin\\code\\lerobot\\outputs\\calibration\\20261017\\pose_capture_combined_review\\reviewed_samples.json": "96ddceafc39fc638ef06ba52fdbdc049a65b7ad997fe1ebebd24405a67ff4885"
+    },
+    "joint_limit_changes": {
+      "shoulder_pan": {
+        "source_joint_rad": [
+          -1.91986,
+          1.91986
+        ],
+        "experiment_rad": [
+          -1.91986,
+          1.91986
+        ]
+      },
+      "shoulder_lift": {
+        "source_joint_rad": [
+          -1.7453293,
+          1.7453293
+        ],
+        "experiment_rad": [
+          -1.9133444045315402,
+          1.74533
+        ]
+      },
+      "elbow_flex": {
+        "source_joint_rad": [
+          -1.69,
+          1.69
+        ],
+        "experiment_rad": [
+          -1.69,
+          1.69
+        ]
+      },
+      "wrist_flex": {
+        "source_joint_rad": [
+          -1.658063,
+          1.658063
+        ],
+        "experiment_rad": [
+          -1.658063,
+          1.7974867736421256
+        ]
+      },
+      "wrist_roll": {
+        "source_joint_rad": [
+          -2.7438473,
+          2.7438473
+        ],
+        "experiment_rad": [
+          -2.74385,
+          2.84121
+        ]
+      }
+    },
+    "original_asset_sha256": "f6757d593e6ea4b5033c3f3d93ce856bc7e73b5357d0090a38f81a5435ca14e8"
+  },
+  "simulation_parameters": {
+    "solver_iterations": 50,
+    "gripper_force_limit_nm": 0.12,
+    "white_robot": true,
+    "source": "Exploratory contact solver/servo assumptions, not hardware force calibration",
+    "mujoco_version": "3.8.1"
+  }
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+  <rect width="210" height="297" fill="white"/>
+  <defs>
+    <pattern id="checker" width="36" height="36" patternUnits="userSpaceOnUse">
+      <rect width="36" height="36" fill="white"/>
+      <rect width="18" height="18" fill="black"/>
+      <rect x="18" y="18" width="18" height="18" fill="black"/>
+    </pattern>
+  </defs>
+  <g font-family="Arial,sans-serif" fill="black">
+    <text x="15" y="22" font-size="5">SO-101 CAMERA CALIBRATION</text>
+    <text x="15" y="32" font-size="3.5">A4 / Actual size / 100% / Do not fit to page</text>
+    <text x="15" y="40" font-size="3.5">10 x 7 squares; 9 x 6 inner corners; square = 18 mm</text>
+  </g>
+  <g transform="translate(15,60)">
+    <rect width="180" height="126" fill="url(#checker)"/>
+  </g>
+  <g stroke="black" stroke-width="0.3">
+    <path d="M15 210 H105 M15 207 V213 M105 207 V213"/>
+  </g>
+  <g font-family="Arial,sans-serif" font-size="3.5" fill="black">
+    <text x="15" y="222">This reference line must measure exactly 90 mm.</text>
+    <text x="15" y="231">Mount flat. Keep the entire board visible and in focus.</text>
+    <text x="15" y="240">Use at least 10 varied views per camera for intrinsics.</text>
+    <text x="15" y="249">Keep independent views for calibration acceptance.</text>
+  </g>
+</svg>

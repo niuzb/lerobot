@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>机械臂标定 · 直接跟随与拍照</title>
+<style>
+body{font:16px system-ui,sans-serif;background:#f1f5f9;color:#172a3b;margin:24px;max-width:1400px}h1{font-size:26px}p{line-height:1.6}.cards{display:flex;gap:16px;flex-wrap:wrap}.card{background:white;border-radius:12px;padding:16px;flex:1;min-width:300px}img{width:100%;aspect-ratio:4/3;background:#172a3b}button,select{padding:12px 16px;border-radius:8px;border:1px solid #b6c5d4;font-size:16px;margin:6px;background:white}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}.primary{background:#127857;color:white}.stop{background:#9f2538;color:white}#message{min-height:30px;font-weight:600}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}td,th{padding:6px;text-align:left;border-bottom:1px solid #e2e8f0}.status{font-weight:600;margin:8px 0}.muted{color:#536779}
+</style>
+<h1>机械臂标定 · 直接跟随与拍照</h1>
+<p>主臂 COM6 → 从臂 COM5。点击开始后直接跟随主臂角度，夹爪也跟随；目标角度每秒最多改变 3°。不需要一直按住按钮。</p>
+<button id="start" class="primary" onclick="startFollow()" disabled>开始跟随</button><button class="stop" onclick="pause()">停止跟随 / Esc</button><span id="mode" class="status">连接设备中</span>
+<div class="cards"><section class="card"><h2>腕部相机 · front</h2><img id="front" alt="腕部相机实时画面"><div id="frontState">连接中</div></section><section class="card"><h2>外部相机 · side</h2><img id="side" alt="外部相机实时画面"><div id="sideState">连接中</div></section></div>
+<section class="card" style="margin-top:16px"><h2>停稳后保存姿态</h2>
+<p>保持棋盘格和底座固定，缓慢移动主臂调整姿态。点击停止，等 1 秒，确认两路都识别到棋盘格，再保存。</p>
+<select id="split"><option value="fit">拟合姿态</option><option value="check">独立检查姿态</option></select><button id="save" class="primary" onclick="window.runPoseCommand('capture',{split:document.getElementById('split').value})" disabled>保存双相机和关节</button><span id="counts" class="status"></span><p id="captureHint" role="status">正在检查保存条件…</p>
+<p id="message" role="status">保存结果会显示在这里。</p>
+<p class="muted">先采 8 个拟合姿态，再采 3 个检查姿态。尽量改变肩、肘、手腕的角度，不要只转底座。采集后还需拟合与验证。</p>
+<table><thead><tr><th>关节</th><th>主臂</th><th>从臂</th><th>拟合姿态跨度</th></tr></thead><tbody id="joints"></tbody></table></section>
+<p><button id="inspectGripper" onclick="window.runPoseCommand('inspect_gripper')" disabled>读取夹爪原始开度</button>量尺时使用，只读且电机未启用时可用。读数显示在上方保存结果处；每次调整后重新读取。</p>
+<p>停止跟随或页面断连后，从臂电机仍保持通电。结束时请托住从臂，再点击释放电机。</p>
+<button onclick="release()">已托住从臂，释放电机</button><button onclick="window.runPoseCommand('shutdown')">关闭采集服务</button>
+<script>
+const key='__SESSION_KEY__';
+let token=null,epoch=0,busy=false,heartbeatPending=false,capturePending=false,latestState=null;
+const byId=id=>document.getElementById(id);
+function message(s){byId('message').textContent=s;if(capturePending)byId('captureHint').textContent=s;}
+function updateControls(){const s=latestState;byId('start').disabled=busy||!s||s.following||!!s.fault||!s.follower;byId('save').disabled=busy||!s||s.following||!!s.fault||!s.follower||!s.cameras?.front?.found||!s.cameras?.side?.found;byId('inspectGripper').disabled=busy||!s||!!s.armed||!!s.torque_owned||!!s.fault||!s.follower;byId('split').disabled=busy;byId('save').textContent=capturePending?'正在等待画面并保存…':'保存双相机和关节';}
+async function post(op,extra={},timeoutMs=2000){const r=await fetch('/command',{method:'POST',headers:{'Content-Type':'application/json','X-Pose-Session':key},body:JSON.stringify({op,...extra}),signal:AbortSignal.timeout(timeoutMs)});const data=await r.json();if(!r.ok){const error=Error(data.message);error.httpStatus=r.status;throw error;}return data;}
+async function savePose(extra){
+  if(busy)return;
+  busy=true;capturePending=true;updateControls();
+  const deadline=performance.now()+5000;
+  const notReady='请点击停止跟随、停稳 1 秒，并让两路完整看到棋盘格';
+  const expired='本次未保存：5 秒内未等到合格画面。请保持停稳并确认两路棋盘完整，再试一次。';
+  try{
+    message('正在等待合格的新画面并保存，最多等待 5 秒…');
+    for(let attempt=0;attempt<20;attempt++){
+      const remaining=Math.floor(deadline-performance.now());
+      if(remaining<=0)throw Error(expired);
+      try{
+        const result=await post('capture',extra,Math.min(2000,remaining));
+        message(result.message||'保存完成');
+        return;
+      }catch(e){
+        // Retry only an explicit rejection before any files were written.
+        // A timeout/disconnect may have saved data: never submit it again automatically.
+        if(e.httpStatus!==422||e.message!==notReady)throw e;
+        const wait=Math.min(250,deadline-performance.now());
+        if(wait<=0)throw Error(expired);
+        await new Promise(resolve=>setTimeout(resolve,wait));
+      }
+    }
+    throw Error(expired);
+  }catch(e){message(['TimeoutError','AbortError','TypeError'].includes(e.name)?'保存结果暂未确认，请先核对已保存计数；不要连续点击。':e.message);}
+  finally{capturePending=false;busy=false;updateControls();}
+}
+async function runPoseCommand(op,extra={}){if(op==='capture')return savePose(extra);if(busy)return;busy=true;updateControls();try{const r=await post(op,extra);message(r.message||'完成');}catch(e){message(e.message);}finally{busy=false;updateControls();}}
+async function startFollow(){if(busy)return;busy=true;const request=++epoch;try{const r=await post('begin');if(request!==epoch){await post('pause');return;}token=r.token;message('正在直接跟随主臂。请缓慢移动，拍照前点击停止。');}catch(e){message(e.message);}finally{busy=false;}}
+async function pause(){++epoch;token=null;try{const r=await post('pause');message(r.message);}catch(e){message(e.message);}}
+async function release(){++epoch;token=null;while(busy)await new Promise(r=>setTimeout(r,25));await runPoseCommand('release');}
+setInterval(async()=>{if(!token||heartbeatPending)return;heartbeatPending=true;const active=token;try{await post('heartbeat',{token:active});}catch(e){if(token===active){token=null;message(e.message);}}finally{heartbeatPending=false;}},200);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')pause();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&token)pause();});window.addEventListener('pagehide',()=>{token=null;});
+const names=['底座旋转（°）','肩关节（°）','肘关节（°）','腕俯仰（°）','腕旋转（°）','夹爪（%）'];
+async function refresh(){
+  try{
+    const r=await fetch('/status',{cache:'no-store',signal:AbortSignal.timeout(1500)});
+    if(!r.ok)throw Error('状态读取失败');
+    const s=await r.json();latestState=s;updateControls();
+    byId('mode').textContent=s.fault?'故障，已停止':s.following?'正在跟随':s.armed?'已停止，保持当前位置':'只读 · 电机未启用';
+    if(!capturePending)byId('captureHint').textContent=s.fault?'不能保存：设备发生故障。':s.following?'不能保存：请先点击停止跟随。':!s.cameras.front?.found?'不能保存：腕部相机尚未识别完整棋盘格。保持纸张不动，调整机械臂姿态，让全部格子入镜。':!s.cameras.side?.found?'不能保存：外部相机尚未识别完整棋盘格。':s.capture_ready?'可以保存：双相机棋盘完整，机械臂已停稳。':'两路棋盘已识别。点击保存后会等待停稳和新画面，最多 5 秒。';
+    byId('counts').textContent=`已保存：拟合 ${s.counts.fit}，检查 ${s.counts.check}`;
+    byId('joints').innerHTML=names.map((n,i)=>`<tr><td>${n}</td><td>${s.leader?.[i]?.toFixed(1)??'—'}</td><td>${s.follower?.[i]?.toFixed(1)??'—'}</td><td>${s.fit_span?.[i]?.toFixed(1)??'0.0'}</td></tr>`).join('');
+    for(const n of ['front','side']){byId(n).src='/image/'+n+'?t='+Date.now();const c=s.cameras[n];byId(n+'State').textContent=c?.found?'已识别 54 个角点':c?.error||'请让整个棋盘格入镜';}
+    if(s.fault)message(s.fault);
+  }catch(e){token=null;latestState=null;updateControls();message('连接中断，跟随将停止，请检查现场机械臂。');}
+  setTimeout(refresh,400);
+}refresh();
+</script></html>
