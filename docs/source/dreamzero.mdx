@@ -1,0 +1,170 @@
+# DreamZero 使用指南
+
+DreamZero 是一个联合预测未来视频和机器人动作的世界动作模型。本次原生接入使用 LeRobot 的数据集、
+处理器、训练流程和检查点机制，包含因果 Wan Transformer、教师强制（teacher forcing）注意力、
+动作／状态寄存器、Wan VAE、UMT5 文本编码器、CLIP 图像编码器，以及流匹配和 UniPC 调度器。
+运行时**不依赖原 DreamZero 源码目录**。
+
+移植基于 DreamZero 提交 `ab790c1`。完整提交号和源文件哈希见
+`src/lerobot/policies/dreamzero/wan/README.md`。代码采用 Apache-2.0 许可证；
+下载的模型权重仍遵循各自模型卡中声明的许可证。
+
+## 验证状态与模型选择
+
+| 配置 | 初始化权重 | 视频输入尺寸（高 × 宽） | VAE 潜在通道数 |
+| --- | --- | --- | --- |
+| `wan22_5b` | Wan2.2-TI2V-5B 视频模型权重 | 160 × 320 | 48 |
+| `wan21_14b` | DreamZero-AgiBot 或 Wan2.1-I2V-14B | 352 × 640 | 16 |
+
+5B 示例从**视频模型**初始化，不是从经过机器人预训练的 DreamZero 检查点初始化。
+14B 适配 SO-101 时，会迁移视频 Transformer，并为新的机器人重新初始化状态／动作投影层。
+转换得到的 SO-101 初始化模型需要先训练，再评估其机器人控制效果。
+
+本次已验证两种架构的真实小型 CPU Transformer、梯度和优化器更新、LoRA、因果隔离、流式缓存、
+真实的小型 VAE／文本／视觉编码器，以及合成检查点导入。
+**尚未验证**完整预训练权重的运行、CUDA 显存占用、分布式训练、推理延迟、任务成功率和真机控制。
+完整模型面向 CUDA 环境；小型测试网络使用 CPU float32。
+只有实际执行下方相应的训练或推理代码，才会启动对应计算；文档本身不会启动 GPU 任务或真机执行。
+
+## 安装与 SO-101 训练
+
+```bash
+uv sync --locked --extra dreamzero
+
+# 从 Wan2.2 5B 初始化；请将数据集 ID 替换为自己的数据集。
+uv run lerobot-train \
+  --config_path=examples/dreamzero/so101_wan22_5b.json \
+  --dataset.repo_id=YOUR_USER/so101_dataset
+
+# 使用经过机器人预训练的 DreamZero 14B 骨干，为 SO-101 新建动作／状态头。
+uv run lerobot-train \
+  --config_path=examples/dreamzero/so101_wan21_14b.json \
+  --dataset.repo_id=YOUR_USER/so101_dataset
+```
+
+两个示例都使用原生 `policy.type=dreamzero`、rank 和 alpha 均为 4 的 LoRA、梯度检查点、
+大小为 1 的微批次，以及 10 步短程训练。示例不会将模型上传到 Hub。
+请使用可按索引访问的数据集（`dataset.streaming=false`），配合按 episode 边界采样的采样器。
+设置 `policy.train_mode=full` 可训练整个 DiT；VAE、UMT5 和 CLIP 始终冻结。
+使用 DreamZero 自身的 `train_mode`，不要额外叠加通用 `--peft` 包装。
+
+默认数据约定如下：
+
+- 帧率为 30 FPS；相机依次为 `observation.images.front`、`observation.images.side`。
+- 各路图像缩放到对应区域后横向拼接；布局会随配置保存。
+- 动作和状态均为 6 维绝对值：前五维是以度为单位的关节位置，末维是范围为 0–100 的夹爪位置。
+- 一个训练窗口包含 4 个块，每块对应 24 步动作和 2 帧潜在视频表示。
+- 图像帧偏移为 `[0,3,…,96]`（共 33 帧），动作偏移为 `[0,…,95]`，
+  状态偏移为 `[0,24,48,72]`。VAE 将 33 帧视频压缩为 9 帧潜在表示。
+- 采样器会排除每个 episode 最后 96 个候选起点，因此 episode 至少需要 97 帧。
+  含边界填充的窗口会被拒绝，不参与训练。
+- 状态和动作的最小值／最大值统计来自目标 LeRobot 数据集。图像经过处理器时保持在 `[0,1]`，
+  进入策略后只缩放一次，转换到 `[-1,1]`。
+
+使用其他相机时，可覆盖 `policy.camera_keys`。`camera_layout` 支持以下布局：
+
+- `horizontal`：按配置顺序横向拼接。
+- `droid`：上方为占满宽度的腕部视角，下方为两路外部相机视角。
+- `grid`：左上为头部视角，左下为左手视角，右上为右手视角，右下留黑。
+
+帧率以及动作与视频的采样比例必须与数据一致。只修改 `fps` 不会对数据集重新采样；
+修改动作块长度时，也需要同步调整 `video_stride` 和 `num_frame_per_block`，满足
+`chunk_size = video_stride × 4 × num_frame_per_block`。
+
+`init_from` 用于从原始 Wan 或原版 DreamZero 的 safetensors 权重初始化 DiT；
+`init_kind` 指定初始化来源（`wan` 或 `dreamzero`），从而确定允许新建哪些参数。
+`--policy.path` 用于加载原生 LeRobot 检查点以继续训练或推理，不会重新下载或再次应用 `init_from`。
+基于原生检查点微调时，除非有意改变训练数据的归一化方式，否则应保留原处理器统计。
+
+## 冻结组件与检查点迁移
+
+LeRobot 检查点包含完整 DiT（包括底座权重和 LoRA 层）、配置及处理器统计。
+冻结编码器的权重在首次使用时单独加载，不会重复存入每一个训练检查点。
+
+默认配置固定了 Wan 和分词器的 Hub 版本。完全使用本地资源时，请设置：
+
+- `wan_path`：包含对应的 `Wan2.1_VAE.pth` 或 `Wan2.2_VAE.pth`，
+  以及 `models_t5_umt5-xxl-enc-bf16.pth` 的目录。
+- `image_encoder_path`：包含 `models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth` 的目录，
+  5B 模型同样需要这个图像编码器。
+- `tokenizer_path`：完整的 UMT5 分词器目录。
+
+迁移到其他机器后，本地组件路径仍须可访问。使用自定义 Hub 组件仓库时，应指定对应的 `*_revision` 字段。
+设置 `text_encoder_device=cpu` 可将冻结文本编码器放在 CPU 上，以减少加速器占用；该方式的性能尚未测量。
+本次原生接入不依赖 Hydra、GEAR、Ray、DeepSpeed 或 TensorRT。
+
+## 转换原版 DreamZero 检查点
+
+```bash
+# 保留 DROID 的相机顺序、动作预测长度、分位数统计和相对动作通道。
+uv run python -m lerobot.policies.dreamzero.convert_checkpoint \
+  --source /path/to/DreamZero-DROID \
+  --embodiment oxe_droid \
+  --output /path/to/dreamzero_droid_lerobot
+
+# 迁移到 SO-101：重新初始化状态／动作头，并使用 SO-101 自身的数据集统计。
+uv run python -m lerobot.policies.dreamzero.convert_checkpoint \
+  --source /path/to/DreamZero-AgiBot \
+  --embodiment so101 \
+  --dataset-stats /path/to/so101_dataset/meta/stats.json \
+  --output /path/to/dreamzero_so101_initialization
+```
+
+保留原机器人类型的转换需要 `config.json`、safetensors 权重（单文件或带索引的分片），
+以及 `experiment_cfg/{conf.yaml,metadata.json}`。
+如果原检查点只保存了 LoRA，还需要提供 `--base /path/to/its_dense_dreamzero_base`，
+并指定其原机器人类型；转换器会合并适配器与已训练的状态／动作头。
+原始 Wan 权重不能替代缺失的机器人训练底座。
+目前不支持按预测步分别计算的分位数归一化；支持的是各通道在动作块间共用的统计。
+
+导入时会在复制权重前检查每个 DiT 参数的名称和形状，拒绝未知参数、非预期缺失及冲突别名，
+并生成 `conversion_report.json`。
+只有明确声明的新状态／动作投影层，以及从 Wan 初始化 5B 时新增的 CLIP 分支，允许缺失。
+原检查点中的冻结编码器条目会列为已忽略，因为原生策略会使用单独引用的冻结 Wan 组件。
+转换时会保留官方 AgiBot 的 48 步动作预测长度；SO-101 训练示例则采用 24 步动作块。
+
+## 离线动作推理
+
+```python
+import torch
+from lerobot.policies import get_policy_class, make_pre_post_processors
+
+checkpoint = "/path/to/native_checkpoint"
+policy = get_policy_class("dreamzero").from_pretrained(checkpoint)
+pre, post = make_pre_post_processors(policy.config, pretrained_path=checkpoint)
+policy.reset()
+
+# 每张图像为 RGB [3,H,W]、float32，取值范围 [0,1]；状态使用数据集中的原始单位。
+observation = {
+    "observation.images.front": torch.zeros(3, 480, 640),
+    "observation.images.side": torch.zeros(3, 480, 640),
+    "observation.state": torch.zeros(6),
+    "task": "pick up the block",
+}
+with torch.inference_mode():
+    action = post(policy.select_action(pre(observation)))  # [1,6]
+```
+
+每个控制周期都要将**真实的当前观测**传给 `select_action`，即使该周期的动作只是从队列中取出。
+下一次预测会使用刚执行完的动作块对应的真实观测帧；预测视频不会被写入真实观测历史。
+
+每个 episode 开始时调用 `reset()`；任务文本改变时也会重置历史。
+中断执行时应调用 `drop_queued_actions()`，它会同时清空缓存。
+当前推理支持单环境、同步调用和完整动作块执行，尚未接入通用异步服务器、部分动作块 RTC 或多客户端推理。
+
+`predict_action_chunk` 返回一个完整动作块。第一次调用传入当前单帧；在默认每块对应两帧潜在表示的配置下，
+连续调用需要为每路相机提供 9 帧采样后的观测。
+直接传入单帧会重新建立上下文。返回的动作需要经过配套后处理器。
+`last_predicted_latents` 提供预测视频的潜在表示，便于诊断，无需强制执行开销较大的视频解码。
+
+## 本地验证
+
+```bash
+uv sync --locked --extra dreamzero --extra test
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run pytest tests/policies/dreamzero -q
+```
+
+测试不会下载完整模型权重。策略生命周期测试使用小型冻结组件替身；
+另有独立测试以缩小后的维度运行真实 VAE、文本和视觉编码器实现。
+正式实验前，仍需分别验证完整权重加载、短程 CUDA 训练、保存后的检查点推理、显存占用，
+以及目标机器人的动作语义。

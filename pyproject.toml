@@ -243,6 +243,13 @@ fastwam = [
     "lerobot[transformers-dep]",
     "lerobot[diffusers-dep]",
 ]
+dreamzero = [
+    "lerobot[transformers-dep]",
+    "lerobot[diffusers-dep]",
+    "lerobot[peft-dep]",
+    "lerobot[dataset]",
+    "sentencepiece>=0.2.0,<0.3.0",
+]
 evo1 = ["lerobot[transformers-dep]"]
 hilserl = ["lerobot[transformers-dep]", "lerobot[dataset]", "gym-hil>=0.1.14,<0.2.0", "lerobot[grpcio-dep]", "lerobot[placo-dep]"]
 vla_jepa = ["lerobot[transformers-dep]", "lerobot[diffusers-dep]", "lerobot[qwen-vl-utils-dep]"]
@@ -330,6 +337,7 @@ all = [
     "lerobot[molmoact2]",
     "lerobot[smolvla]",
     "lerobot[fastwam]",
+    "lerobot[dreamzero]",
     "lerobot[groot]",
     "lerobot[xvla]",
     "lerobot[evo1]",
@@ -444,6 +452,8 @@ ignore = [
 "src/lerobot/templates/**" = ["D"]
 # Vendored from transformers; keeps its upstream docstring style so syncs stay clean.
 "src/lerobot/policies/molmoact2/molmoact2_hf_model/**" = ["D"]
+# Preserve mathematical names and upstream cache signatures in vendored DreamZero/Wan code.
+"src/lerobot/policies/dreamzero/wan/**" = ["N801", "N803", "N806", "N812", "B006", "B905"]
 # Awaiting conversion, one PR per module.
 "src/lerobot/annotations/**" = ["D"]
 "src/lerobot/async_inference/**" = ["D"]

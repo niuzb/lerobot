@@ -1,0 +1,24 @@
+{
+  "dataset": {"repo_id": "YOUR_USER/so101_dataset", "video_backend": "pyav"},
+  "policy": {
+    "type": "dreamzero",
+    "backbone": "wan21_14b",
+    "init_from": "GEAR-Dreams/DreamZero-AgiBot",
+    "init_kind": "dreamzero",
+    "reset_action_heads": true,
+    "train_mode": "lora",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "camera_keys": ["observation.images.front", "observation.images.side"],
+    "action_dim": 6,
+    "state_dim": 6,
+    "push_to_hub": false
+  },
+  "output_dir": "outputs/train/dreamzero_so101_14b",
+  "batch_size": 1,
+  "num_workers": 2,
+  "steps": 10,
+  "env_eval_freq": 0,
+  "save_freq": 10,
+  "log_freq": 1
+}

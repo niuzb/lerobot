@@ -1,0 +1,24 @@
+{
+  "dataset": {"repo_id": "YOUR_USER/so101_dataset", "video_backend": "pyav"},
+  "policy": {
+    "type": "dreamzero",
+    "backbone": "wan22_5b",
+    "init_from": "Wan-AI/Wan2.2-TI2V-5B",
+    "init_revision": "921dbaf3f1674a56f47e83fb80a34bac8a8f203e",
+    "init_kind": "wan",
+    "train_mode": "lora",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "camera_keys": ["observation.images.front", "observation.images.side"],
+    "action_dim": 6,
+    "state_dim": 6,
+    "push_to_hub": false
+  },
+  "output_dir": "outputs/train/dreamzero_so101_5b",
+  "batch_size": 1,
+  "num_workers": 2,
+  "steps": 10,
+  "env_eval_freq": 0,
+  "save_freq": 10,
+  "log_freq": 1
+}

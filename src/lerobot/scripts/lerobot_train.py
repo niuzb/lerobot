@@ -509,7 +509,8 @@ def train(cfg: TrainPipelineConfig):
     processor_dataset_stats = rename_stats(dataset.meta.stats, cfg.rename_map)
     if (processor_pretrained_path and not cfg.resume) or not processor_pretrained_path:
         processor_kwargs["dataset_stats"] = processor_dataset_stats
-    if cfg.is_reward_model_training:
+    if cfg.is_reward_model_training or active_cfg.type == "dreamzero":
+        # DreamZero validates its action/video sampling ratio against the dataset FPS.
         processor_kwargs["dataset_meta"] = dataset.meta
     if not cfg.is_reward_model_training and processor_pretrained_path is not None:
         preprocessor_overrides = {
