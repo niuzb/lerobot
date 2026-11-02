@@ -3,6 +3,7 @@
 """DreamZero joint video/action flow matching and observed-history streaming."""
 
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -118,6 +119,18 @@ class DreamZeroPolicy(PreTrainedPolicy):
         kwargs["_skip_base_loading"] = True
         kwargs.setdefault("strict", True)
         return super().from_pretrained(*args, **kwargs)
+
+    @classmethod
+    def _load_as_safetensor(cls, model, model_file, map_location, strict):
+        directory = Path(model_file).parent
+        if not Path(model_file).exists() and (directory / "model.safetensors.index.json").is_file():
+            # Full training exports bounded-size shards so saving does not duplicate
+            # the entire model alongside the CPU-offloaded optimizer.
+            from .checkpoint import load_checked
+
+            load_checked(model.model, directory)
+            return model
+        return super()._load_as_safetensor(model, model_file, map_location, strict)
 
     @property
     def device(self):
@@ -279,7 +292,21 @@ class DreamZeroPolicy(PreTrainedPolicy):
         )
         video_weight = self.scheduler.training_weight(times.flatten()).to(latents.device).reshape(b, frames)
         loss_video = (video_error * video_weight).mean()
-        action_error = (action_pred.float() - (action_noise - action).float()).square()
+        action_target = (action_noise - action).float()
+        action_error = (action_pred.float() - action_target).square()
+        action_diagnostics = {}
+        if cfg.action_dim == 7:
+            # Reconstruct clean normalized actions from the flow velocity for LIBERO diagnostics.
+            sigma = (action_times.float() / self.scheduler.num_train_timesteps).to(action.device)
+            predicted_action = noisy_action.float() - sigma.unsqueeze(-1) * action_pred.float()
+            active_prediction = predicted_action[..., :7]
+            active_target = action[..., :7].float()
+            action_diagnostics = {
+                "action_mse_7d": (active_prediction - active_target).square().mean().detach(),
+                "gripper_accuracy": (
+                    (active_prediction[..., 6] >= 0) == (active_target[..., 6] >= 0)
+                ).float().mean().detach(),
+            }
         # Preserve upstream's padded-width reduction while excluding padded channels.
         mask = torch.arange(cfg.max_action_dim, device=action.device) < cfg.action_dim
         action_weight = (
@@ -289,6 +316,7 @@ class DreamZeroPolicy(PreTrainedPolicy):
         return loss_video + loss_action, {
             "loss_video": loss_video.detach().item(),
             "loss_action": loss_action.detach().item(),
+            **action_diagnostics,
         }
 
     def _model_pass(self, latent, times, action, action_times, state, context, cache, start, condition):

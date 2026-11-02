@@ -253,6 +253,22 @@ class CausalWanSelfAttention(nn.Module):
         self.attn = AttentionModule(num_heads=self.num_heads, head_dim=self.head_dim)
         self.causal_attn = AttentionModule(num_heads=self.num_heads, head_dim=self.head_dim, causal=True)
 
+    def _online_action_state_attention(self, roped_query, roped_action_query, new_k, new_v,
+                                       roped_action_key, action_v):
+        """Keep online state-token context aligned with the training attention mask."""
+        state_count = self.num_state_per_block
+        image_action = self.attn(
+            torch.cat([roped_query, roped_action_query[:, :-state_count]], dim=1),
+            torch.cat([new_k, roped_action_key], dim=1),
+            torch.cat([new_v, action_v], dim=1),
+        )
+        state_output = self.attn(
+            roped_action_query[:, -state_count:],
+            roped_action_key[:, -state_count:],
+            action_v[:, -state_count:],
+        )
+        return torch.cat([image_action, state_output], dim=1)
+
     def _blockwise_causal_flash_attn(
         self,
         q,
@@ -1075,10 +1091,10 @@ class CausalWanSelfAttention(nn.Module):
             new_v = new_v[:, -self.max_attention_size :]
 
             if action_register_length is not None:
-                x = self.attn(
-                    torch.cat([roped_query, roped_action_query], dim=1),
-                    torch.cat([new_k, roped_action_key], dim=1),
-                    torch.cat([new_v, action_v], dim=1),
+                # State tokens condition video/action queries, while their own
+                # queries attend only to the current state block.
+                x = self._online_action_state_attention(
+                    roped_query, roped_action_query, new_k, new_v, roped_action_key, action_v
                 )
             else:
                 x = self.attn(

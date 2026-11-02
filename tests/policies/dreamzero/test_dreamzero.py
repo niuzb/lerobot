@@ -70,8 +70,8 @@ def tiny_config(**kwargs):
     cfg.input_features = {
         key: PolicyFeature(type=FeatureType.VISUAL, shape=(3, 32, 32)) for key in cfg.camera_keys
     }
-    cfg.input_features["observation.state"] = PolicyFeature(type=FeatureType.STATE, shape=(6,))
-    cfg.output_features = {"action": PolicyFeature(type=FeatureType.ACTION, shape=(6,))}
+    cfg.input_features["observation.state"] = PolicyFeature(type=FeatureType.STATE, shape=(cfg.state_dim,))
+    cfg.output_features = {"action": PolicyFeature(type=FeatureType.ACTION, shape=(cfg.action_dim,))}
     return cfg
 
 
@@ -111,10 +111,11 @@ def batch_for(cfg, training=True, value=0.4):
         key: torch.full((1, cfg.num_video_frames, 3, 32, 32) if training else (1, 3, 32, 32), value)
         for key in cfg.camera_keys
     }
-    batch["observation.state"] = torch.zeros(1, cfg.training_chunks, 6) if training else torch.zeros(1, 6)
+    batch["observation.state"] = (torch.zeros(1, cfg.training_chunks, cfg.state_dim) if training
+                                  else torch.zeros(1, cfg.state_dim))
     batch["task"] = ["pick up the block"]
     if training:
-        batch["action"] = torch.zeros(1, cfg.chunk_size * cfg.training_chunks, 6)
+        batch["action"] = torch.zeros(1, cfg.chunk_size * cfg.training_chunks, cfg.action_dim)
     return batch
 
 
@@ -207,6 +208,23 @@ def test_real_core_forward_backward_and_optimizer(backbone, checkpointing):
     assert policy.model.head.head.weight.grad.abs().sum() > 0
     optimizer.step()
     assert not torch.equal(before, policy.model.action_decoder.layer2.W)
+
+
+def test_full_training_checkpointing_preserves_loss_and_gradients():
+    recompute = policy_for(tiny_config(use_gradient_checkpointing=True))
+    retain = policy_for(tiny_config(use_gradient_checkpointing=False))
+    retain.load_state_dict(recompute.state_dict())
+    losses = []
+    for policy in (recompute, retain):
+        torch.manual_seed(1234)
+        loss, _ = policy(batch_for(policy.config))
+        loss.backward()
+        losses.append(loss.detach())
+    torch.testing.assert_close(losses[0], losses[1])
+    for left, right in zip(recompute.parameters(), retain.parameters(), strict=True):
+        assert (left.grad is None) == (right.grad is None)
+        if left.grad is not None:
+            torch.testing.assert_close(left.grad, right.grad, rtol=1e-5, atol=1e-7)
 
 
 @pytest.mark.parametrize("checkpointing", [False, True])
@@ -314,6 +332,24 @@ def test_save_reload_without_base_or_encoders(tmp_path, train_mode):
     actual = loaded.predict_action_chunk(batch_for(cfg, False))
     torch.testing.assert_close(expected, actual)
     assert all(not k.startswith("_components") for k in loaded.state_dict())
+
+
+
+def test_libero_7d_action_8d_state_public_shapes_and_metrics():
+    cfg = tiny_config(action_dim=7, state_dim=8, training_chunks=4, max_cache_chunks=4,
+                      num_action_per_block=16, num_frame_per_block=2, video_stride=2,
+                      n_action_steps=16, guidance_scale=1)
+    policy = policy_for(cfg)
+    loss, metrics = policy(batch_for(cfg, training=True))
+    assert torch.isfinite(loss)
+    assert {"loss_video", "loss_action", "action_mse_7d", "gripper_accuracy"} <= metrics.keys()
+    assert torch.isfinite(torch.as_tensor(metrics["action_mse_7d"]))
+    assert torch.isfinite(torch.as_tensor(metrics["gripper_accuracy"]))
+    chunk = policy.predict_action_chunk(batch_for(cfg, training=False))
+    assert chunk.shape == (1, 16, 7)
+    policy.reset()
+    action = policy.select_action(batch_for(cfg, training=False))
+    assert action.shape == (1, 7)
 
 
 def test_padding_and_temporal_mismatch_rejected():
