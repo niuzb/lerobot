@@ -122,7 +122,9 @@ def main():
         subprocess.run([sys.executable, "-u", *map(str, command)], check=True)
 
     generator = ["-m", "lerobot.sim2real.experimental_generation", "--config", args.config]
-    training = ["so101_r2s2r.py", "train", "--config", args.config, "--base", args.base, "--device", "cuda"]
+    training = [
+        "-m", "lerobot.sim2real.cli", "train", "--config", args.config, "--base", args.base, "--device", "cuda"
+    ]
     try:
         pilot_dataset = args.root / "pilot_dataset"
         run("export_pilot", [*generator, "--export-from", args.pilot, "--output", pilot_dataset])

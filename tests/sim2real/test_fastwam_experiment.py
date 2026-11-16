@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "train_fastwam_so101_20261020.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts/policies/fastwam/train_fastwam_so101_20261020.py"
 if not SCRIPT.exists():
     SCRIPT = Path(__file__).resolve().parents[2].parent / "train_fastwam_so101_20261020.py"
 spec = importlib.util.spec_from_file_location("fastwam_experiment", SCRIPT)

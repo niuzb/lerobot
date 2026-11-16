@@ -12,7 +12,7 @@ import pytest
 @pytest.fixture
 def rollout(monkeypatch):
     spec = importlib.util.spec_from_file_location(
-        "short_rollout_reset_test", Path(__file__).parents[2] / "short_rollout.py"
+        "short_rollout_reset_test", Path(__file__).parents[2] / "scripts/diagnostics/short_rollout.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

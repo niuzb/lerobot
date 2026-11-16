@@ -16,6 +16,8 @@ limitations under the License.
 
 # Generating the documentation
 
+For repository guides, runbooks, and architecture notes, see the [documentation index](../AGENTS.md#documentation-index).
+
 To generate the documentation, you first have to build it. Several packages are necessary to build the doc,
 you can install them with the following command, at the root of the code repository:
 

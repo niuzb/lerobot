@@ -9,7 +9,7 @@ import torch
 
 def test_logs_requested_and_executed_actions_separately(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
-        'pi05_logging_test', Path(__file__).parents[2] / 'pi05_remote_rollout.py'
+        'pi05_logging_test', Path(__file__).parents[2] / 'scripts/policies/pi05/pi05_remote_rollout.py'
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

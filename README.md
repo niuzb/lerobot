@@ -25,6 +25,8 @@
 
 🤗 Comprehensive support for the open-source ecosystem to democratize physical AI.
 
+See the [repository documentation index](./AGENTS.md#documentation-index) for SO-101 guides, policy runbooks, and architecture notes, or read the [Chinese project overview](./docs/guides/readme_zh.md).
+
 ## Quick Start
 
 LeRobot can be installed directly from PyPI.

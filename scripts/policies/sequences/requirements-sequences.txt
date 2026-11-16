@@ -1,0 +1,6 @@
+# Additional local dependencies for sequences_so101_rollout.py; LeRobot base deps remain required.
+sequence-ai==0.56.9
+feetech-servo-sdk==1.0.0
+pyserial==3.5
+deepdiff==8.6.2
+msvc-runtime==14.51.36231; sys_platform == "win32"

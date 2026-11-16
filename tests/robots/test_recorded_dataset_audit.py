@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 spec = importlib.util.spec_from_file_location(
-    "check_recorded_dataset", Path(__file__).resolve().parents[2] / "check_recorded_dataset.py"
+    "check_recorded_dataset", Path(__file__).resolve().parents[2] / "scripts/datasets/check_recorded_dataset.py"
 )
 audit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)

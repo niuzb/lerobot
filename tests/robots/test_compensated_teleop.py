@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 spec = importlib.util.spec_from_file_location(
-    "compensated_teleop", Path(__file__).resolve().parents[2] / "compensated_teleop.py"
+    "compensated_teleop", Path(__file__).resolve().parents[2] / "scripts/teleop/compensated_teleop.py"
 )
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

@@ -1,6 +1,17 @@
 This file provides guidance to AI agents when working with code in this repository.
 
-> **User-facing help → [`AGENT_GUIDE.md`](./AGENT_GUIDE.md)** (SO-101 setup, recording, picking a policy, training duration, eval — with copy-pasteable commands).
+## Documentation Index
+
+- [User guides](./docs/guides/) include the [SO-101 quickstart and training guide](./docs/guides/AGENT_GUIDE.md) and the [Chinese project overview](./docs/guides/readme_zh.md).
+- [Architecture](./docs/architecture/) covers the [CLI commands](./docs/architecture/cli/README.md), [rollout internals](./docs/architecture/LEROBOT_ROLLOUT_ARCHITECTURE.md), and [training internals](./docs/architecture/train.md).
+- [Dataset operations](./docs/datasets/) cover recording recovery and dataset cleaning.
+- [Policy runbooks and experiment records](./docs/policies/) are grouped by [ACT](./docs/policies/act/), [FastWAM](./docs/policies/fastwam/), [Pi 0.5](./docs/policies/pi05/), [SmolVLA](./docs/policies/smolvla/), and [VLA-JEPA](./docs/policies/vla-jepa/).
+- [Simulation](./docs/simulation/) covers Isaac Sim setup, VLA-JEPA simulation, and the SO-101 real-to-sim-to-real workflow.
+- [Change summaries](./docs/changes/) record past repository changes.
+- [Community guidelines](./docs/CONTRIBUTING.md) include the [code of conduct](./docs/CODE_OF_CONDUCT.md), [security policy](./docs/SECURITY.md), and [AI usage policy](./docs/community/AI_POLICY.md).
+- [Hugging Face documentation sources](./docs/source/) ship to the public site. See the [build and preview instructions](./docs/README.md).
+
+Add repository-wide documentation to the matching directory under `docs/`. Add a link here when introducing a new documentation category.
 
 ## Project Overview
 
@@ -43,10 +54,13 @@ pre-commit run --all-files                           # Lint + format (ruff, typo
 - **`tests/`** — Pytest suite organized by module. Fixtures in `tests/fixtures/`, mocks in `tests/mocks/`. Hardware tests use skip decorators from `tests/utils.py`. E2E tests via `Makefile` write to `tests/outputs/`.
 - **`.github/workflows/`** — CI: `quality.yml` (pre-commit), `fast_tests.yml` (base deps, every PR), `full_tests.yml` (all extras + E2E + GPU, post-approval), `latest_deps_tests.yml` (daily lockfile upgrade), `security.yml` (TruffleHog), `release.yml` (PyPI publish on tags).
 - **`docs/source/`** — HF documentation (`.mdx` files). Per-policy READMEs, hardware guides, tutorials. Built separately via `docs-requirements.txt` and CI workflows.
+- **[`scripts/`](./scripts/)** — Repository tools and experiment entry points for [datasets](./scripts/datasets/),
+  [teleoperation](./scripts/teleop/), [diagnostics](./scripts/diagnostics/), [simulation](./scripts/simulation/), and
+  [policies](./scripts/policies/). Run documented commands from the repository root.
 - **`examples/`** — End-user tutorials and scripts organized by use case (dataset creation, training, hardware setup).
 - **`docker/`** — Dockerfiles for user (`Dockerfile.user`) and CI (`Dockerfile.internal`).
 - **`benchmarks/`** — Performance benchmarking scripts.
-- **Root files**: `pyproject.toml` (single source of truth for deps, build, tool config), `Makefile` (E2E test targets), `uv.lock`, `CONTRIBUTING.md` & `README.md` (general information).
+- **Root files** include `pyproject.toml` (single source of truth for deps, build, tool config), `Makefile` (E2E test targets), `uv.lock`, and `README.md` (project overview).
 
 ## Notes
 
