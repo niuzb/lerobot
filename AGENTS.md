@@ -6,7 +6,7 @@ This file provides guidance to AI agents when working with code in this reposito
 - [Architecture](./docs/architecture/) covers the [CLI commands](./docs/architecture/cli/README.md), [rollout internals](./docs/architecture/LEROBOT_ROLLOUT_ARCHITECTURE.md), and [training internals](./docs/architecture/train.md).
 - [Dataset operations](./docs/datasets/) cover recording recovery and dataset cleaning.
 - [Policy runbooks and experiment records](./docs/policies/) are grouped by [ACT](./docs/policies/act/), [FastWAM](./docs/policies/fastwam/), [Pi 0.5](./docs/policies/pi05/), [SmolVLA](./docs/policies/smolvla/), and [VLA-JEPA](./docs/policies/vla-jepa/).
-- [Simulation](./docs/simulation/) covers Isaac Sim setup, VLA-JEPA simulation, and the SO-101 real-to-sim-to-real workflow.
+- [Simulation](./docs/simulation/) covers Isaac Sim setup, VLA-JEPA simulation, the SO-101 real-to-sim-to-real workflow, and the [LeIsaac tape task, mixed training, and GRPO runbook](./docs/simulation/SO101_TAPE_LEISAAC_RUNBOOK.md).
 - [Change summaries](./docs/changes/) record past repository changes.
 - [Community guidelines](./docs/CONTRIBUTING.md) include the [code of conduct](./docs/CODE_OF_CONDUCT.md), [security policy](./docs/SECURITY.md), and [AI usage policy](./docs/community/AI_POLICY.md).
 - [Hugging Face documentation sources](./docs/source/) ship to the public site. See the [build and preview instructions](./docs/README.md).

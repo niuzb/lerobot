@@ -1,0 +1,15 @@
+# Install into an isolated Python 3.11 environment alongside Isaac Sim 5.1.0.
+# The official SIM runtime already supplies torch 2.7.0+cu128, NumPy and SciPy.
+isaaclab==2.3.0
+gymnasium==1.2.0
+cloudpickle==3.1.2
+Farama-Notifications==0.0.4
+prettytable==3.3.0
+wcwidth==0.2.14
+flatdict==4.0.1
+einops==0.8.1
+deepdiff==8.6.1
+orderly-set==5.5.0
+pyglet==1.5.31
+h5py==3.14.0
+hidapi==0.14.0.post2
