@@ -19,8 +19,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from lerobot.configs import PipelineFeatureType, PolicyFeature
 from lerobot.lerobot_types import EnvTransition, TransitionKey
 from lerobot.utils.constants import (
@@ -64,8 +62,11 @@ class RenderTrainingMessagesStep(ProcessorStep):
             "recipe": asdict(self.recipe) if self.recipe is not None else None,
         }
 
-    def __call__(self, transition: EnvTransition) -> EnvTransition | None:
-        """Render one sample or one batch of training annotations."""
+    def __call__(self, transition: EnvTransition) -> EnvTransition | None:  # type: ignore[override]
+        """Render one sample or one batch of training annotations.
+
+        Returns `None` to drop a sparse sample that no recipe branch or task fallback can render.
+        """
         if self.recipe is None:
             return transition
 
@@ -112,7 +113,9 @@ class RenderTrainingMessagesStep(ProcessorStep):
             events=events,
             t=unwrap_scalar(timestamp),
             sample_idx=int(unwrap_scalar(sample_idx)),
-            task=complementary_data.get("task"),
+            # The dataset task is the fallback, not an override, so ``${task}`` can
+            # rotate through the episode's ``task_aug`` rephrasings.
+            default_task=complementary_data.get("task"),
             dataset_ctx=self.dataset_ctx,
         )
         if rendered is None:
@@ -136,7 +139,7 @@ class RenderTrainingMessagesStep(ProcessorStep):
         complementary_data: dict[str, Any],
         persistent_batch: list,
         events_batch: list,
-    ) -> EnvTransition | None:
+    ) -> EnvTransition:
         """Render a language batch.
 
         Non-empty persistent and event batches must have the same size. Either
@@ -165,7 +168,7 @@ class RenderTrainingMessagesStep(ProcessorStep):
                 events=events_batch[i] if i < len(events_batch) else [],
                 t=_batch_value(timestamp, i),
                 sample_idx=int(_batch_value(complementary_data.get("index", 0), i)),
-                task=_batch_value(complementary_data.get("task"), i),
+                default_task=_batch_value(complementary_data.get("task"), i),
                 dataset_ctx=self.dataset_ctx,
             )
             if rendered is None:
@@ -295,7 +298,7 @@ def _select_batch_indices(transition: EnvTransition, indices: list[int], batch_s
             }
     action = selected.get(TransitionKey.ACTION)
     if action is not None:
-        selected[TransitionKey.ACTION] = _select_value(action, indices, batch_size, str(TransitionKey.ACTION))
+        selected[TransitionKey.ACTION] = _select_value(action, indices, batch_size, TransitionKey.ACTION)
     return selected
 
 
@@ -308,10 +311,8 @@ def _select_value(value: Any, indices: list[int], batch_size: int, path: str) ->
                 f"Cannot filter batched field {path!r}: expected {batch_size} values, got {len(value)}."
             )
         return [value[i] for i in indices]
-    if isinstance(value, np.ndarray) and value.ndim > 0:
+    if getattr(value, "ndim", 0) > 0:
         return value[indices]
-    if hasattr(value, "index_select") and hasattr(value, "new_tensor") and getattr(value, "ndim", 0) > 0:
-        return value.index_select(0, value.new_tensor(indices).long())
     return value
 
 
