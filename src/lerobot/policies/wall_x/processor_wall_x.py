@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,7 @@ from lerobot.processor import (
     make_policy_processor_pipelines,
 )
 from lerobot.utils.constants import ACTION, MESSAGES_RENDERED, OBS_STATE
+from lerobot.utils.hub import split_hub_reference
 from lerobot.utils.import_utils import _transformers_available, require_package
 from lerobot.utils.language import normalize_semantic_messages, semantic_message_content_text
 
@@ -88,11 +90,20 @@ def make_wall_x_pre_post_processors(
         A tuple containing the configured pre-processor and post-processor pipelines
     """
 
+    if config.output_features is None:
+        raise ValueError("WALL-X needs `output_features` to build its processor pipelines.")
+
     steps = make_default_policy_processor_steps(config, dataset_stats)
 
+    recipe = None
+    if config.recipe is not None:
+        from lerobot.datasets.recipe import TrainingRecipe  # recipes need the dataset extras
+
+        recipe = TrainingRecipe.from_dict(config.recipe)
+
     input_steps = [
-        RenderRuntimeMessagesStep(config.recipe),
-        RenderTrainingMessagesStep(config.recipe),
+        RenderRuntimeMessagesStep(recipe),
+        RenderTrainingMessagesStep(recipe),
         steps.rename_observations,
         WallXTaskProcessor(),  # Process task description
         steps.add_batch_dim,
@@ -100,6 +111,7 @@ def make_wall_x_pre_post_processors(
         WallXPromptProcessorStep(image_keys=list(config.image_features), chunk_size=config.chunk_size),
         WallXTokenizerStep(
             processor_name=config.pretrained_name_or_path,
+            trust_remote_code=config.trust_remote_code,
             processor_revision=config.pretrained_revision,
             action_tokenizer_name=config.action_tokenizer_path,
             image_keys=list(config.image_features),
@@ -180,7 +192,7 @@ class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
         raise ValueError(f"Expected {name} for exactly {batch_size} samples.")
 
     @staticmethod
-    def _message_content(message: dict[str, Any]) -> str:
+    def _message_content(message: Mapping[str, Any]) -> str:
         text = semantic_message_content_text(message.get("content"))
         say_texts = []
         for call in message.get("tool_calls") or []:
@@ -207,7 +219,7 @@ class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
 
     def _recipe_segments(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Mapping[str, Any]],
         streams: list[str | None],
         targets: list[int],
         task: str,
@@ -258,7 +270,7 @@ class WallXPromptProcessorStep(ComplementaryDataProcessorStep):
         return segments, predicts_action
 
     def _generation_segments(
-        self, messages: list[dict[str, Any]], image_labels: list[str]
+        self, messages: list[Mapping[str, Any]], image_labels: list[str]
     ) -> list[dict[str, str | bool]]:
         segments, _ = self._recipe_segments(messages, [None] * len(messages), [], "", image_labels)
         segments.append({"text": "<|im_start|>assistant\n", "target": False})
@@ -356,6 +368,7 @@ class WallXTokenizerStep(ProcessorStep):
     use_fast_tokenizer: bool = False
     action_tokenizer_name: str | None = None
     processor_revision: str | None = None
+    trust_remote_code: bool = False
     _processor: Any = field(default=None, init=False, repr=False)
     _action_tokenizer: Any = field(default=None, init=False, repr=False)
 
@@ -376,16 +389,23 @@ class WallXTokenizerStep(ProcessorStep):
     def _get_processors(self):
         if self._processor is None:
             require_package("transformers", extra="wallx")
+            repo_id, revision = split_hub_reference(self.processor_name, self.processor_revision)
             self._processor = AutoProcessor.from_pretrained(
-                self.processor_name,
-                revision=self.processor_revision,
+                repo_id,
+                trust_remote_code=self.trust_remote_code,
                 use_fast=True,
+                revision=revision,
+                code_revision=revision,
             )
             if self.use_fast_tokenizer:
                 if self.action_tokenizer_name is None:
                     raise ValueError("Fast WALL-X tokenization requires action_tokenizer_name.")
+                repo_id, revision = split_hub_reference(self.action_tokenizer_name)
                 self._action_tokenizer = AutoProcessor.from_pretrained(
-                    self.action_tokenizer_name, trust_remote_code=True
+                    repo_id,
+                    trust_remote_code=self.trust_remote_code,
+                    revision=revision,
+                    code_revision=revision,
                 )
         return self._processor, self._action_tokenizer
 
@@ -428,6 +448,8 @@ class WallXTokenizerStep(ProcessorStep):
         batch = {**observation, **complementary}
         action = transition.get(TransitionKey.ACTION)
         if action is not None:
+            if not isinstance(action, torch.Tensor):
+                raise ValueError("WALL-X requires a tensor action before tokenization.")
             batch[ACTION] = action
         state = batch.get(OBS_STATE)
         if not isinstance(state, torch.Tensor):
